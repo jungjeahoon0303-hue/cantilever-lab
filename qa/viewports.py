@@ -19,6 +19,7 @@ PAGE = os.environ.get("E2E_PAGE", "index.html")
 CHROME = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
 DBG, HTTP = 9334, 8091
 SIZES = [("1920x1080", 1920, 1080, False), ("1280x720", 1280, 720, False),
+         ("ipad_portrait_768x1024", 768, 1024, True), ("ipad_landscape_1024x768", 1024, 768, True), ("ipad_pro_1024x1366", 1024, 1366, True),
          ("tablet_820x1180", 820, 1180, True), ("small_540x900", 540, 900, True), ("phone_390x844", 390, 844, True)]
 
 

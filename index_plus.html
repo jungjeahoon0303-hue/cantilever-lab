@@ -179,6 +179,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-s
 }
 .readout-table td { padding: 7px 10px; border-bottom: 1px solid #dcdde1; font-size: 0.98rem; }
 .readout-table tr:last-child td { border-bottom: none; }
+.readout-toggle { display:none; width:100%; font-family:'IBM Plex Sans KR', sans-serif; font-weight:700; font-size:0.95rem; padding:10px; background:#dfe6e9; color:#2f3542; border:2.5px solid #2f3542; border-radius:10px; cursor:pointer; box-shadow:3px 3px 0 #1e272e; }
 .readout-table td.label { color: #747d8c; font-family: 'IBM Plex Sans KR', sans-serif; font-weight: 600; font-size: 0.98rem; }
 .readout-table td.val { text-align: right; font-weight: 700; font-size: 1.06rem; color: #2f3542; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .readout-table tr.highlight td { background: #ffeaa7; color: #d63031; font-weight: 700; }
@@ -468,6 +469,14 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-s
   .spawner-name { display:none; }
   .spawner-card { min-width: 56px; }
 }
+/* 아이패드 (가로 1024 · 세로 1024~1366): 부재 설정 바가 내용만큼 자라고, 두께 슬라이더는 한 줄을 차지 */
+@media (max-width: 1120px) and (min-width: 821px) {
+  .setup-bar { overflow: visible; max-width: none; flex: 1 1 auto; }
+  .setup-row { flex-wrap: wrap; }
+  .setup-row .slider-box { flex: 1 1 100%; }
+  .spawner-card { min-width: 50px; padding: 4px 5px; }
+  .cam-hint { display: none; }   /* 조작 안내는 아래 도움말(가이드)에 있다 */
+}
 
 /* ── 좁은 화면 (태블릿/휴대폰): 위쪽 3D, 아래쪽 패널(스크롤), 맨 아래 도크·부재 ── */
 @media (max-width: 820px) {
@@ -489,6 +498,8 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-s
   .speech .avatar { font-size: 1.3rem; }
   .speech p { font-size: 0.72rem; padding: 6px 9px; }
   .readout-card .section-title { display:none; }
+  .readout-toggle { display:block; }
+  .readout-card:not(.open) .readout-table { display:none !important; }
   .readout-table { display:block; border-width: 1px; }
   .readout-table tbody { display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .readout-table tr { display:flex; flex-direction:column; padding: 1px 5px; }
@@ -600,8 +611,9 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-s
     <div class="crit-note" id="critNote" style="display:none"></div>
     <div class="lin-warn" id="linWarn" style="display:none">⚠ 처짐이 보 길이의 10%를 넘었습니다. 표의 값은 소변형(선형) 보 이론 계산값이라 실제 큰 변형과는 오차가 큽니다.</div>
 
-    <div class="panel-card readout-card">
+    <div class="panel-card readout-card" id="readoutCard">
       <div class="section-title">실시간 역학 상태</div>
+      <button type="button" class="readout-toggle" id="btnReadoutToggle" aria-expanded="false">📊 수치 표 펼쳐 보기</button>
       <table class="readout-table">
         <tr>
           <td class="label">재하 하중물</td>
@@ -1022,6 +1034,22 @@ function unlockAudio() {
 }
 window.addEventListener('click', unlockAudio, { once: true });
 window.addEventListener('touchstart', unlockAudio, { once: true });
+
+/* 파괴 순간의 '쩍' 소리: 짧고 날카로운 잡음 (보가 부러질 때 한 번) */
+function playCrack() {
+  if (!soundEnabled) return;
+  try {
+    unlockAudio();
+    const ctx = audioCtx, n = Math.floor(ctx.sampleRate * 0.35);
+    const buf = ctx.createBuffer(1, n, ctx.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 3);
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 900;
+    const g = ctx.createGain(); g.gain.value = 1.0;
+    src.connect(hp); hp.connect(g); g.connect(ctx.destination);
+    src.start();
+  } catch (e) { /* 소리를 쓸 수 없는 환경이면 조용히 넘어간다 */ }
+}
 
 function playSound(type) {
   if (!soundEnabled) return;
@@ -1769,6 +1797,40 @@ function createVoxelCar() {
   return carGroup;
 }
 
+/* 농부 75 kg: 밀짚모자·체크 셔츠·멜빵바지·장화에 쇠스랑을 든 앞모습 */
+function createVoxelFarmer() {
+  const g = new THREE.Group();
+  const skin = 0xffcd9f, shirt = 0xe74c3c, shirtDark = 0xc0392b, denim = 0x3867d6, denimDark = 0x2d54b0;
+  const boot = 0x6d4c41, hair = 0x7d5a3c, straw = 0xf1c40f, strawDark = 0xd4a84b, dark = 0x2f3542, metal = 0x95a5a6, wood = 0x8d6e63;
+  // 장화 · 다리(멜빵바지)
+  vxBox(g, 0.12, 0.07, 0.15, boot, -0.08, 0.035, 0.02); vxBox(g, 0.12, 0.07, 0.15, boot, 0.08, 0.035, 0.02);
+  vxBox(g, 0.11, 0.16, 0.13, denim, -0.08, 0.15, 0); vxBox(g, 0.11, 0.16, 0.13, denim, 0.08, 0.15, 0);
+  // 몸통: 체크 셔츠 + 멜빵바지 가슴판
+  vxBox(g, 0.30, 0.17, 0.20, shirt, 0, 0.345, 0);
+  vxBox(g, 0.16, 0.12, 0.02, denim, 0, 0.30, 0.105);         // 멜빵바지 가슴판
+  vxBox(g, 0.03, 0.10, 0.02, denimDark, -0.06, 0.37, 0.105); vxBox(g, 0.03, 0.10, 0.02, denimDark, 0.06, 0.37, 0.105);   // 멜빵끈
+  vxBox(g, 0.30, 0.04, 0.21, denimDark, 0, 0.245, 0);        // 허리띠
+  vxBox(g, 0.30, 0.03, 0.21, shirtDark, 0, 0.42, 0, false);  // 체크 무늬 띠
+  // 팔 · 손
+  vxBox(g, 0.08, 0.17, 0.08, shirt, -0.20, 0.35, 0); vxBox(g, 0.08, 0.17, 0.08, shirt, 0.20, 0.35, 0);
+  vxBox(g, 0.07, 0.07, 0.07, skin, -0.20, 0.25, 0); vxBox(g, 0.07, 0.07, 0.07, skin, 0.20, 0.25, 0);
+  // 머리 · 얼굴
+  vxBox(g, 0.22, 0.22, 0.22, skin, 0, 0.53, 0);
+  vxBox(g, 0.04, 0.05, 0.02, dark, -0.055, 0.55, 0.115, false); vxBox(g, 0.04, 0.05, 0.02, dark, 0.055, 0.55, 0.115, false);   // 눈
+  vxBox(g, 0.03, 0.04, 0.03, 0xf0a77a, 0, 0.52, 0.12, false);                                                                  // 코
+  vxBox(g, 0.07, 0.02, 0.01, 0xc0392b, 0, 0.485, 0.115, false);                                                                // 입
+  vxBox(g, 0.23, 0.05, 0.23, hair, 0, 0.645, 0, false);
+  // 밀짚모자: 챙 · 머리 부분 · 띠
+  vxBox(g, 0.42, 0.03, 0.42, straw, 0, 0.665, 0);
+  vxBox(g, 0.22, 0.10, 0.22, strawDark, 0, 0.72, 0);
+  vxBox(g, 0.23, 0.02, 0.23, dark, 0, 0.685, 0, false);
+  // 쇠스랑 (오른손 옆)
+  vxBox(g, 0.03, 0.56, 0.03, wood, 0.31, 0.30, 0.05);
+  [-0.03, 0, 0.03].forEach(dx => vxBox(g, 0.02, 0.09, 0.02, metal, 0.31 + dx, 0.62, 0.05));
+  vxBox(g, 0.08, 0.02, 0.02, metal, 0.31, 0.58, 0.05, false);
+  return g;
+}
+
 /* 옆모습으로 만든 하중물을 돌려 관객 쪽을 보게 한다 (농부처럼 앞모습이 보이도록) */
 function faceFront(g) { g.rotation.y = -Math.PI / 2; return g; }
 
@@ -2242,6 +2304,7 @@ function triggerFailure(mode) {
   failureMode = mode;
   clearSelection();
   playSound('snap');
+  playCrack();
   beamGroup.visible = false;
   beamLabels.forEach(l => { l.sprite.visible = false; });
   hidePreview();
@@ -2733,7 +2796,7 @@ function drawBMD() {
 
 /* 하중 목록: 각 하중의 P·x 기여분을 보여줘 M = ΣP·x 를 체감 */
 const LOAD_TYPES = {
-  worker:    { name: '농부', icon: '🧑‍🌾', weight: 75, len: 0.32, make: () => createVoxelEngineer() },
+  worker:    { name: '농부', icon: '🧑‍🌾', weight: 75, len: 0.32, make: () => createVoxelFarmer() },
   pig:       { name: '돼지', icon: '🐷', weight: 150, len: 0.34, make: () => faceFront(createVoxelPig()) },
   cow:       { name: '소', icon: '🐮', weight: 500, len: 0.52, make: () => faceFront(createVoxelCow()) },
   tractor:   { name: '트랙터', icon: '🚜', weight: 1500, len: 0.76, make: () => faceFront(createVoxelTractor()) },
@@ -3840,6 +3903,14 @@ function submitRanking() {
   return entry;
 }
 document.getElementById('btnEnd').addEventListener('click', openEnd);
+// 좁은 화면: 수치 표는 기본으로 접혀 있고, 버튼을 눌러야 펼쳐진다 (표 때문에 그래프·조작부가 가려지지 않게)
+document.getElementById('btnReadoutToggle').addEventListener('click', () => {
+  const card = document.getElementById('readoutCard');
+  const open = card.classList.toggle('open');
+  const btn = document.getElementById('btnReadoutToggle');
+  btn.setAttribute('aria-expanded', String(open));
+  btn.textContent = open ? '📊 수치 표 접기' : '📊 수치 표 펼쳐 보기';
+});
 document.getElementById('btnCloseEnd').addEventListener('click', () => endModal.classList.remove('open'));
 document.getElementById('btnEndContinue').addEventListener('click', () => endModal.classList.remove('open'));
 document.getElementById('btnRankSave').addEventListener('click', submitRanking);
