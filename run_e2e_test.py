@@ -842,6 +842,72 @@ async def main():
                 assert await ev(ws, 589, "missions.first") is True, "new run can earn points again"
                 await ev(ws, 590, "resetMissions(); resetExperiment(); 0")
 
+            # 47. 모바일(터치): 도크에서 끌어 보에 놓기, 보 위 하중을 손가락으로 옮기기, 재료 버튼 탭
+            if await ev(ws, 600, "typeof updateStatTiles === 'function'") is True:
+                await send_cmd(ws, 601, "Emulation.setDeviceMetricsOverride", {"width": 390, "height": 844, "deviceScaleFactor": 1, "mobile": True})
+                await send_cmd(ws, 602, "Emulation.setTouchEmulationEnabled", {"enabled": True, "maxTouchPoints": 5})
+                await asyncio.sleep(0.8)
+                await ev(ws, 603, "resetMissions(); resetExperiment(); 0")
+                await ev(ws, 604, "document.querySelector('.mat-btn[data-mat=\"mild_steel\"]').click(); 0")
+                tid = [6100]
+                async def touch_path(pts):
+                    tid[0] += 1
+                    await send_cmd(ws, tid[0], "Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": pts[0][0], "y": pts[0][1]}]})
+                    for x, y in pts[1:]:
+                        tid[0] += 1
+                        await send_cmd(ws, tid[0], "Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": x, "y": y}]})
+                        await asyncio.sleep(0.02)
+                    tid[0] += 1
+                    await send_cmd(ws, tid[0], "Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+                    await asyncio.sleep(0.3)
+                async def tap(x, y):
+                    await touch_path([(x, y)])
+                def line(a, b, n=14):
+                    return [(a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n) for k in range(n + 1)]
+                # 보 위 점(화면 좌표) 계산: 보의 s 위치 기준
+                BEAM_SCREEN = "(s) => { const pt = visPts.reduce((best, p) => Math.abs(p.s - s) < Math.abs(best.s - s) ? p : best); const cr = canvas.getBoundingClientRect(); const v = new THREE.Vector3(pt.x, pt.y + BEAM_H / 2, 0).project(camera); return [cr.left + (v.x + 1) / 2 * cr.width, cr.top + (1 - v.y) / 2 * cr.height]; }"
+                dock = json.loads(await ev(ws, 605, "JSON.stringify((() => { const r = document.getElementById('spawnHeavy').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })())"))
+                target = json.loads(await ev(ws, 606, f"JSON.stringify(({BEAM_SCREEN})(3.0))"))
+                await touch_path(line(dock, target))
+                st = json.loads(await ev(ws, 607, "JSON.stringify({n: loadsOnBeam().length, x: loadsOnBeam().length ? loadsOnBeam()[0].xPos : null, b: isBroken})"))
+                print(f"Touch drop from dock: {st}")
+                assert st["n"] == 1 and not st["b"] and st["x"] is not None and abs(st["x"] - 3.0) < 0.2, st
+                # 보 위 하중을 손가락으로 끌어 옮기기 (x 3.0 → 1.5)
+                cen = json.loads(await ev(ws, 608, "JSON.stringify((() => { const c = loadsOnBeam()[0]; const cr = canvas.getBoundingClientRect(); const v = new THREE.Box3().setFromObject(c.mesh).getCenter(new THREE.Vector3()).project(camera); return [cr.left + (v.x + 1) / 2 * cr.width, cr.top + (1 - v.y) / 2 * cr.height]; })())"))
+                goal = json.loads(await ev(ws, 609, f"JSON.stringify(({BEAM_SCREEN})(1.5))"))
+                await touch_path(line(cen, goal))
+                st = json.loads(await ev(ws, 610, "JSON.stringify({x: loadsOnBeam()[0].xPos, move: missions.move})"))
+                print(f"Touch move on beam: {st}")
+                assert abs(st["x"] - 1.5) < 0.2 and st["move"], st
+                # 재료 버튼 탭 (콘크리트)
+                cr = json.loads(await ev(ws, 611, "JSON.stringify((() => { const r = document.querySelector('.mat-btn[data-mat=\"concrete\"]').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })())"))
+                await tap(cr[0], cr[1])
+                mk = await ev(ws, 612, "currentMatKey")
+                print(f"Tap material: {mk}")
+                assert mk == "concrete", mk
+                await shot(ws, 613, "20_mobile_touch.png")
+                # 휴대폰에서 개념 페이지·종료 모달도 탭으로 열리고, 닫는 버튼이 화면 안에 있어야 함
+                cc = json.loads(await ev(ws, 617, "JSON.stringify((() => { const r = curveCard.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })())"))
+                await tap(cc[0], cc[1])
+                await asyncio.sleep(0.4)
+                mv = json.loads(await ev(ws, 618, "JSON.stringify((() => { const r = btnConceptOk.getBoundingClientRect(); const h = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return {open: conceptModal.classList.contains('open'), inside: r.top >= 0 && r.bottom <= innerHeight, hit: !!h && (h === btnConceptOk || btnConceptOk.contains(h))}; })())"))
+                print(f"Phone concept modal: {mv}")
+                assert mv["open"] and mv["inside"] and mv["hit"], mv
+                await shot(ws, 619, "21_mobile_concept.png")
+                await ev(ws, 620, "conceptModal.classList.remove('open'); 0")
+                ec = json.loads(await ev(ws, 621, "JSON.stringify((() => { const r = btnEnd.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })())"))
+                await tap(ec[0], ec[1])
+                await asyncio.sleep(0.4)
+                mv = json.loads(await ev(ws, 622, "JSON.stringify((() => { const r = btnCloseEnd.getBoundingClientRect(); return {open: endModal.classList.contains('open'), inside: r.top >= 0 && r.bottom <= innerHeight && r.right <= innerWidth}; })())"))
+                print(f"Phone end modal: {mv}")
+                assert mv["open"] and mv["inside"], mv
+                await shot(ws, 623, "22_mobile_end.png")
+                await ev(ws, 624, "endModal.classList.remove('open'); 0")
+                await send_cmd(ws, 614, "Emulation.setTouchEmulationEnabled", {"enabled": False})
+                await send_cmd(ws, 615, "Emulation.clearDeviceMetricsOverride")
+                await asyncio.sleep(0.6)
+                await ev(ws, 616, "resetMissions(); resetExperiment(); document.querySelector('.mat-btn[data-mat=\"mild_steel\"]').click(); 0")
+
             errors = [e for e in EVENTS if e["method"] == "Runtime.exceptionThrown"
                       or (e["method"] == "Runtime.consoleAPICalled" and e["params"]["type"] in ("error", "warning"))
                       or (e["method"] == "Log.entryAdded" and e["params"]["entry"]["level"] == "error")]
