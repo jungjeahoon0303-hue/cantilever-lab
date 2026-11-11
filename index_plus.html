@@ -361,6 +361,31 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-s
 .modal-foot { padding: 10px 20px 16px; display:flex; gap:8px; justify-content:flex-end; border-top: 2px solid #e1e5ea; }
 .modal-foot .arcade-btn { flex: 0 0 auto; padding: 8px 16px; }
 
+/* 실패 카드: 보가 부러지면 중앙에 도장처럼 찍히고, 다시 시작 버튼을 보여 준다 */
+.fail-card { position:fixed; left:50%; top:34%; transform: translate(-50%,-50%) scale(0.7); z-index:940; width:min(92%, 440px);
+  background:#fff; border:3.5px solid #1e272e; box-shadow:6px 6px 0 #1e272e; border-radius:20px; padding:20px 24px 22px; text-align:center;
+  opacity:0; pointer-events:none; transition: opacity 0.25s, transform 0.35s cubic-bezier(0.175,0.885,0.32,1.275); }
+.fail-card.show { opacity:1; pointer-events:auto; transform: translate(-50%,-50%) scale(1); }
+.fail-stamp { display:inline-block; font-family: var(--font-arcade); font-size:2.1rem; color:#ff4757; border:4px solid #ff4757; border-radius:10px; padding:2px 16px; transform: rotate(-8deg); margin-bottom:10px; opacity:0; }
+.fail-card.show .fail-stamp { animation: stamp 0.45s ease-out 0.15s both; }
+@keyframes stamp { 0% { transform: rotate(-8deg) scale(2.2); opacity:0; } 60% { transform: rotate(-8deg) scale(0.92); opacity:1; } 100% { transform: rotate(-8deg) scale(1); opacity:1; } }
+.fail-card h2 { font-size:1.25rem; color:#1e272e; margin-bottom:8px; font-family:'IBM Plex Sans KR', sans-serif; }
+.fail-card p { font-family:'IBM Plex Sans KR', sans-serif; color:#2f3542; line-height:1.65; font-size:1rem; margin-bottom:16px; }
+.fail-btns { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+#canvas3d.quake { animation: quake 0.5s ease-in-out; }
+@keyframes quake { 0%,100% { transform: translate(0,0); } 10% { transform: translate(-7px,3px); } 20% { transform: translate(7px,-4px); } 30% { transform: translate(-6px,2px); } 40% { transform: translate(5px,-2px); } 55% { transform: translate(-3px,1px); } 75% { transform: translate(2px,-1px); } }
+
+/* 개념 페이지: 글자·수식을 키워 한눈에 읽히게 */
+.concept-modal .modal-content { max-width: 1020px; }
+.concept-modal .modal-header { padding: 18px 24px; }
+.concept-modal .modal-header h2 { font-size: 1.45rem; }
+.concept-modal .modal-body { font-size: 1.05rem; line-height: 1.75; padding: 22px 26px; gap: 18px; }
+.concept-modal .modal-body h3 { font-size: 1.2rem; color: #0652dd; }
+.concept-modal .eq { font-size: 1.12rem; padding: 12px 16px; line-height: 1.85; }
+.concept-modal .live-box { font-size: 1.04rem; padding: 14px 16px; line-height: 1.85; }
+.concept-banner { background:#2f3542; color:#fff; border-radius:14px; padding:14px 18px; text-align:center; font-family: var(--font-mono); font-size:1.4rem; font-weight:700; letter-spacing:0.2px; box-shadow: 4px 4px 0 #1e272e; }
+.concept-banner small { display:block; font-family:'IBM Plex Sans KR', sans-serif; font-size:0.95rem; font-weight:500; color:#dfe6e9; margin-top:6px; }
+
 /* 종료·랭킹 모달 */
 .final-score { text-align:center; padding: 6px 0 2px; }
 .final-score .num { font-family: var(--font-arcade); font-size: 3rem; font-weight: 700; color:#d35400; line-height:1; }
@@ -732,13 +757,15 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-s
 </div>
 
 <!-- 응력·단면계수 개념 페이지 (σ-ε 선도를 누르면 열림) -->
-<div id="conceptModal" class="modal-overlay">
+<div id="conceptModal" class="modal-overlay concept-modal">
   <div class="modal-content wide">
     <div class="modal-header blue">
       <h2>🔍 휨응력 σ = M/S 와 단면계수 S = bh²/6</h2>
       <button class="modal-close" id="btnCloseConcept">&times;</button>
     </div>
     <div class="modal-body">
+      <div class="concept-banner">σ = M ÷ S &nbsp;&nbsp; S = b·h² ÷ 6
+        <small>휨응력 = 휨모멘트 ÷ 단면계수. 두께 h 가 두 배면 S 는 네 배가 됩니다.</small></div>
       <div class="concept-grid">
         <div>
           <h3>1. 보가 휘면 단면에 응력이 생긴다</h3>
@@ -766,7 +793,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-s
             <polygon points="190,135 118,210 190,210" fill="rgba(31,111,178,0.22)" stroke="#1f6fb2" stroke-width="2"/>
             <line x1="190" y1="50" x2="190" y2="220" stroke="#2f3542" stroke-width="1.5"/>
             <line x1="180" y1="135" x2="200" y2="135" stroke="#0984e3" stroke-width="1.5"/>
-            <text x="268" y="64" font-size="11" fill="#c0392b" font-family="IBM Plex Mono">σmax = M/S</text>
+            <text x="196" y="46" font-size="13" fill="#c0392b" font-family="IBM Plex Mono" font-weight="700">σmax = M/S</text>
             <text x="196" y="130" font-size="10" fill="#0984e3" font-family="IBM Plex Sans KR">σ = 0</text>
             <text x="200" y="224" font-size="10" fill="#1f6fb2" font-family="IBM Plex Sans KR">압축 (−)</text>
             <text x="160" y="270" font-size="11" text-anchor="middle" fill="#57606f" font-family="IBM Plex Sans KR">응력은 중립축에서 거리 y 에 비례 → 바깥 면에서 최대</text>
@@ -786,6 +813,17 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-s
       </div>
     </div>
     <div class="modal-foot"><button type="button" class="arcade-btn success" id="btnConceptOk">✅ 이해했어요</button></div>
+  </div>
+</div>
+
+<!-- 실패: 보가 부러지면 점수가 사라지고 다시 시작할 수 있다 -->
+<div id="failCard" class="fail-card" role="alertdialog" aria-live="assertive" aria-labelledby="failTitle">
+  <div class="fail-stamp">실패</div>
+  <h2 id="failTitle">💥 보가 부러졌어요</h2>
+  <p id="failSub"></p>
+  <div class="fail-btns">
+    <button type="button" class="arcade-btn danger" id="btnFailRetry">🔄 처음부터 다시 시작</button>
+    <button type="button" class="arcade-btn" id="btnFailView">결과 보기</button>
   </div>
 </div>
 
@@ -2057,6 +2095,18 @@ function placeLoadsOnBeam() {
 /* ─────────────────────────────────────────────────────────────
    8. 파괴 연출: 연성(크게 휜 뒤 끊어짐) vs 취성(예고 없이 산산조각)
    ───────────────────────────────────────────────────────────── */
+/* 실패 카드: 보가 부러지면 안내를 띄우고, 점수는 그대로 두며 새 시편으로 다시 시작할 수 있다 */
+let failTimer = null;
+function showFailCard() {
+  const rubber = currentMat.isRubber;
+  document.getElementById('failTitle').textContent = rubber ? '💥 고무 보가 찢어졌어요' : failureMode === 'ductile' ? '💥 보가 크게 휜 뒤 끊어졌어요' : '💥 보가 부러져 호수에 빠졌어요';
+  document.getElementById('failSub').textContent = `실패! 지금까지 모은 ${score.toLocaleString()}점은 그대로 남아 있어요. 새 시편으로 다시 도전하면 0점에서 시작합니다.`;
+  document.getElementById('failCard').classList.add('show');
+}
+function hideFailCard() {
+  clearTimeout(failTimer); failTimer = null;
+  document.getElementById('failCard').classList.remove('show');
+}
 function triggerFailure(mode) {
   if (isBroken) return;
   isBroken = true;
@@ -2109,8 +2159,11 @@ function triggerFailure(mode) {
   } else {
     showToast('💥 예고 없이 한 번에 깨져 호수로 떨어졌습니다! (취성 파괴)', 'danger');
   }
+  const cv = document.getElementById('canvas3d');
+  cv.classList.remove('quake'); void cv.offsetWidth; cv.classList.add('quake');   // 화면 흔들림
   updateHUD();
-  checkMissions();
+  checkMissions();   // 파괴 미션(콘크리트·목재·연성 파괴)은 여기서 점수를 얻는다
+  clearTimeout(failTimer); failTimer = setTimeout(showFailCard, 1800);   // 조각이 호수에 떨어지는 것을 보여 준 뒤 실패 카드
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -2950,6 +3003,11 @@ document.getElementById('btnUnload').addEventListener('click', () => {
   }
 });
 
+document.getElementById('btnFailRetry').addEventListener('click', () => {
+  resetMissions(); invalidateLoadPlans(); resetExperiment();
+  showToast('🔄 새 시편으로 처음부터 다시 시작합니다.', 'normal');
+});
+document.getElementById('btnFailView').addEventListener('click', hideFailCard);
 document.getElementById('btnReset').addEventListener('click', () => {
   invalidateLoadPlans();
   resetExperiment();
@@ -2969,6 +3027,7 @@ function removeMesh(obj) {
 }
 
 function resetExperiment() {
+  hideFailCard();
   characters.forEach(c => removeMesh(c.mesh));
   characters = [];
   while (debrisGroup.children.length > 0) removeMesh(debrisGroup.children[0]);

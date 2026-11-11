@@ -695,6 +695,8 @@ async def main():
             await ev(ws, 506, "resetExperiment(); spawnCharacterAt('car', 4.0); 0")
             learn0 = await ev(ws, 507, "missions.learn")
             await ev(ws, 508, "document.getElementById('curveCard').click(); 0")
+            await asyncio.sleep(0.4)
+            await shot(ws, 5081, "19_concept_page.png")
             st = json.loads(await ev(ws, 509, """JSON.stringify({open: conceptModal.classList.contains('open'), learn: missions.learn, live: conceptLive.textContent,
                 strip: formulaStrip.textContent, valS: valS.textContent, title: document.querySelector('#conceptModal h2').textContent, Smm: Math.round(BEAM_S * 1e6)})"""))
             print(f"Concept page: open={st['open']} learn={learn0}->{st['learn']} S={st['Smm']} live='{st['live'][:80]}…'")
@@ -821,6 +823,24 @@ async def main():
                 print(f"Plus score popup: {st}")
                 assert st["pops"] == 1 and st["learn"] and all(v > 1000 for v in st["z"]) and len(st["tops"]) == 2 and st["tops"][1] - st["tops"][0] >= 20 and all(0 <= t < 900 for t in st["tops"]) and st["n0"] == st["n1"] == 0, st   # 두 팝업 모두 화면 안, 아래로 층층이
                 await ev(ws, 574, "document.querySelectorAll('.score-pop').forEach(e => e.remove()); localStorage.clear(); resetMissions(); resetExperiment(); 0")
+
+            # 46. (번외) 보가 부러져도 점수는 남고, 실패 카드에서 새 시편을 받으면 0점에서 다시 시작
+            if await ev(ws, 580, "typeof showFailCard === 'function'") is True:
+                await click_mat(ws, 581, "concrete")
+                await ev(ws, 582, "resetMissions(); resetExperiment(); spawnCharacterAt('heavy', 5.5); 0")
+                await asyncio.sleep(2.2)
+                fc = json.loads(await ev(ws, 583, "JSON.stringify({b: isBroken, show: failCard.classList.contains('show'), sub: failSub.textContent, score, pts: MISSIONS.filter(x => missions[x.key]).reduce((a, x) => a + x.pts, 0), cnt: missionCnt.textContent})"))
+                print(f"Failure card keeps score: {fc}")
+                assert fc["b"] and fc["show"] and "남아" in fc["sub"] and fc["score"] == fc["pts"] == 200 and fc["cnt"] == "2 / 12", fc
+                assert await ev(ws, 584, "(() => { const r = btnFailRetry.getBoundingClientRect(); const h = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!h && (h === btnFailRetry || btnFailRetry.contains(h)); })()") is True, "retry button must be clickable"
+                await shot(ws, 585, "18_failure_card.png")
+                await ev(ws, 586, "btnFailRetry.click(); 0")
+                re = json.loads(await ev(ws, 587, "JSON.stringify({show: failCard.classList.contains('show'), broken: isBroken, loads: loadsOnBeam().length, score})"))
+                print(f"After retry: {re}")
+                assert not re["show"] and not re["broken"] and re["loads"] == 0 and re["score"] == 0, re
+                await ev(ws, 588, "spawnCharacterAt('block500', 1.0); 0")
+                assert await ev(ws, 589, "missions.first") is True, "new run can earn points again"
+                await ev(ws, 590, "resetMissions(); resetExperiment(); 0")
 
             errors = [e for e in EVENTS if e["method"] == "Runtime.exceptionThrown"
                       or (e["method"] == "Runtime.consoleAPICalled" and e["params"]["type"] in ("error", "warning"))

@@ -55,6 +55,10 @@ python qa/viewports.py     # 1920 / 1280 / 820 / 540 / 390px 스크린샷 + 가�
 `run_e2e_test.py` 는 Python `websockets` 패키지와 Chrome 이 필요하다.
 `E2E_PAGE=index_plus.html` 을 주면 번외 파일을 같은 시나리오로 검사한다 (`qa/viewports.py` 도 동일). 번외 파일에서는 45번 시나리오(수치 타일 기준·단축키 드래그 방어·점수 팝업·연성 안내 재현)가 추가로 돈다.
 
+## 배포본
+
+`index.html` 이 배포되는 최종 버전(번외 UX 버전)이다. 이전 기본 버전은 `archive/index_basic.html` 에 보관. `index_plus.html` 은 `index.html` 과 같은 내용이다.
+
 ## 번외 파일 `index_plus.html`
 
 본 파일(`index.html`)에 UX 를 더 얹어 본 실험판. 핵심 수치 타일(M · σ/σ_y · δ), 다음 미션 강조와 '하는 법' 안내(항목 클릭), 점수 +N 팝업, 재료 칩 색 점, 키보드 단축키(1~5 하중물 · U 제거 · R 교체 · V 시점 · G 가이드). 역학 계산은 본 파일과 같다.
