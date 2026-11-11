@@ -63,6 +63,8 @@ async def main():
                 await cmd("Emulation.setDeviceMetricsOverride", {"width": w, "height": h, "deviceScaleFactor": 1, "mobile": mobile})
                 await cmd("Page.navigate", {"url": f"http://127.0.0.1:{HTTP}/{PAGE}"})
                 await asyncio.sleep(2.5)
+                await cmd("Runtime.evaluate", {"expression": "const b = document.getElementById('btnStart'); if (b) b.click(); 0", "returnByValue": True})   # 표지 넘기기
+                await asyncio.sleep(0.8)
                 hint = await cmd("Runtime.evaluate", {"expression": "(() => { const r = document.getElementById('firstHint').getBoundingClientRect(); return JSON.stringify({l: r.left, r: r.right, w: innerWidth}); })()", "returnByValue": True})
                 hb = json.loads(hint["result"]["result"]["value"])
                 shot0 = await cmd("Page.captureScreenshot", {"format": "png"})
@@ -70,7 +72,7 @@ async def main():
                     f.write(base64.b64decode(shot0["result"]["data"]))
                 if hb["l"] < 0 or hb["r"] > hb["w"]:
                     errors.append(f"{name}: first hint clipped {hb}")
-                r = await cmd("Runtime.evaluate", {"expression": "spawnCharacterAt('heavy', 5.5); spawnCharacterAt('car', 3.5); JSON.stringify({sw: document.documentElement.scrollWidth, iw: innerWidth})", "returnByValue": True})
+                r = await cmd("Runtime.evaluate", {"expression": "spawnCharacterAt('excavator', 5.5); spawnCharacterAt('tractor', 3.5); JSON.stringify({sw: document.documentElement.scrollWidth, iw: innerWidth})", "returnByValue": True})
                 dims = json.loads(r["result"]["result"]["value"])
                 await asyncio.sleep(0.8)
                 shot = await cmd("Page.captureScreenshot", {"format": "png"})
@@ -93,16 +95,19 @@ async def main():
                 for k, v in vis.items():
                     if v != "ok":
                         errors.append(f"{name}: {k} {v}")
+                # 표지를 넘기고 시작 (표지가 화면을 덮고 있으면 조작부가 가려진 것으로 잘못 나온다)
+                await cmd("Runtime.evaluate", {"expression": "const b = document.getElementById('btnStart'); if (b) b.click(); 0", "returnByValue": True})
+                await asyncio.sleep(0.8)
                 # 하단 부재 설정·도크·종료 버튼·재료 칩·두께 슬라이더가 화면 안에 다 보이고 그 자리에서 눌리는지 (review_15 P1-1)
                 ctl = await cmd("Runtime.evaluate", {"expression": """(() => {
                     const out = {};
-                    const ids = ['setupBar', 'dockBar', 'btnEnd', 'btnUnload', 'btnReset', 'beamHSlider', 'spawnHeavy', 'matGrid'];
+                    const ids = ['setupBar', 'dockBar', 'btnEnd', 'btnUnload', 'btnReset', 'beamHSlider', 'spawnExcavator', 'matGrid'];
                     if (document.getElementById('statRow')) ids.push('statRow', 'tileS');   // 번외 파일: 핵심 수치 타일 (패널 안에서 스크롤해 닿을 수 있어야 함)
                     for (const id of ids) {
                       const el = document.getElementById(id);
                       if (id === 'statRow' || id === 'tileS') el.scrollIntoView({block: 'nearest'});
                       const r = el.getBoundingClientRect();
-                      if (id === 'spawnHeavy' && dockBar.scrollWidth > dockBar.clientWidth + 1) { out[id] = 'ok'; continue; }   // 도크 가로 스크롤은 허용
+                      if (id === 'spawnExcavator' && dockBar.scrollWidth > dockBar.clientWidth + 1) { out[id] = 'ok'; continue; }   // 도크 가로 스크롤은 허용
                       const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
                       const hit = document.elementFromPoint(cx, cy);
                       const inside = r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth + 1 && r.height >= 12;

@@ -55,7 +55,7 @@ async def shot(ws, msg_id, name):
 
 
 DRAG_POS_JS = """(() => {
-    const r = document.getElementById('spawnBlock500').getBoundingClientRect();
+    const r = document.getElementById('spawnCow').getBoundingClientRect();
     const v = new THREE.Vector3(3.0, 0.15, 0).project(camera);
     return JSON.stringify({sx: r.left + r.width/2, sy: r.top + r.height/2,
         tx: (v.x + 1) / 2 * innerWidth, ty: (1 - v.y) / 2 * innerHeight});
@@ -126,6 +126,8 @@ async def main():
 
             # 0. 이전 실행에서 저장된 미션·점수·랭킹 지우고 깨끗한 상태로
             await ev(ws, 6, "localStorage.clear(); resetMissions(); 0")
+            await ev(ws, 7, "document.getElementById('btnStart').click(); 0")   # 표지 → 게임 시작
+            await asyncio.sleep(0.7)
             assert await ev(ws, 6001, "score") == 0
 
             # 1. 보가 실제로 씬에 있고 보이는지 (가장 큰 문제였던 항목)
@@ -158,22 +160,22 @@ async def main():
                 if mat == "concrete":
                     await shot(ws, 40, "02_concrete.png")
 
-            # 3. 하중물 스폰 (시험추 100, 적재블록 500, 작업자 75, 차량 1500)
-            for i, sid in enumerate(["spawnWeight100", "spawnBlock500", "spawnWorker", "spawnCar"]):
+            # 3. 하중물 스폰 (돼지 150, 소 500, 작업자 75, 트랙터 1500)
+            for i, sid in enumerate(["spawnPig", "spawnCow", "spawnWorker", "spawnTractor"]):
                 await ev(ws, 50 + i, f"document.getElementById('{sid}').click()")
                 await asyncio.sleep(0.2)
             st = json.loads(await ev(ws, 60, "JSON.stringify({people: valPeople.textContent, score: scoreBadge.textContent, first: missions.first, defl: valDeflection.textContent, stress: valStress.textContent})"))
             print(f"After 4 loads: {st}")
             assert await ev(ws, 61001, "document.getElementById('firstHint').classList.contains('hidden')") is True, "첫 하중 후 안내가 사라져야 함"
-            assert "4 개" in st["people"] and "2,175 kg" in st["people"], st
+            assert "4 개" in st["people"] and "2,225 kg" in st["people"], st
             assert st["first"] and "50 점" in st["score"], st
 
             # 4. 중장비 5,000 kg
-            await ev(ws, 61, "document.getElementById('spawnHeavy').click()")
+            await ev(ws, 61, "document.getElementById('spawnExcavator').click()")
             await asyncio.sleep(1.0)
             st = json.loads(await ev(ws, 62, "JSON.stringify({people: valPeople.textContent, defl: valDeflection.textContent, stress: valStress.textContent, badge: statusBadge.textContent})"))
-            print(f"After heavy: {st}")
-            assert "7,175 kg" in st["people"]
+            print(f"After excavator: {st}")
+            assert "7,225 kg" in st["people"]
             assert float(st["defl"].replace(" cm", "")) > 1.0
             await shot(ws, 63, "03_loaded_steel.png")
 
@@ -187,7 +189,7 @@ async def main():
             # 6. 콘크리트 취성 파괴 (적재블록 500 kg 하나면 인장강도 초과)
             await ev(ws, 80, "document.querySelector('button[data-mat=\"concrete\"]').click()")
             await asyncio.sleep(0.2)
-            await ev(ws, 81, "document.getElementById('spawnBlock500').click()")
+            await ev(ws, 81, "document.getElementById('spawnCow').click()")
             await asyncio.sleep(0.8)
             st = json.loads(await ev(ws, 82, "JSON.stringify({badge: statusBadge.textContent, isBroken, people: valPeople.textContent, defl: currentDeflection, lbl: lblYield.textContent})"))
             print(f"Concrete: {st}")
@@ -212,7 +214,7 @@ async def main():
 
             # 9. 수치 정확도: 연강, 적재블록 500kg @ x=3.0m → M = 4905*3 = 14.715 kN·m, σ = M/S
             await click_mat(ws, 110, "mild_steel")
-            await ev(ws, 111, "spawnCharacterAt('block500', 3.0); 0")
+            await ev(ws, 111, "spawnCharacterAt('cow', 3.0); 0")
             st = json.loads(await ev(ws, 112, "JSON.stringify({M: currentMaxMoment, s: currentMaxStress, d: currentDeflection})"))
             b, h, L = 0.18, 0.28, 6.0
             S = b * h * h / 6; I = b * h ** 3 / 12; P = 500 * 9.81; E = 200e9
@@ -224,7 +226,7 @@ async def main():
             assert abs(st["d"] - d_exp) / d_exp < 0.01, "tip deflection differs from theory by >1%"
 
             # 10. 소성 이력: 재계산을 반복해도 영구처짐이 늘지 않아야 함
-            await ev(ws, 120, "resetExperiment(); spawnCharacterAt('heavy', 5.9); spawnCharacterAt('heavy', 5.0); spawnCharacterAt('heavy', 4.2); 0")
+            await ev(ws, 120, "resetExperiment(); spawnCharacterAt('excavator', 5.9); spawnCharacterAt('excavator', 5.0); spawnCharacterAt('excavator', 4.2); 0")
             st = json.loads(await ev(ws, 121, "JSON.stringify({s: currentMaxStress, p: currentPermanent, broken: isBroken, badge: statusBadge.textContent})"))
             print(f"Plastic state: {st}")
             assert not st["broken"] and st["s"] > 275 and st["p"] > 0, st
@@ -279,7 +281,7 @@ async def main():
             await asyncio.sleep(0.3)
             st = json.loads(await ev(ws, 178, "JSON.stringify(loadsOnBeam().map(c => [c.type, c.xPos]))"))
             print(f"  after drop: {st}")
-            assert len(st) == 1 and st[0][0] == "block500" and abs(st[0][1] - 3.0) < 0.35, st
+            assert len(st) == 1 and st[0][0] == "cow" and abs(st[0][1] - 3.0) < 0.35, st
             assert "x = " in cap and "preview=true" in cap
 
             # 13. 3D 화면에서 하중물 클릭 → 제거
@@ -289,11 +291,16 @@ async def main():
             await mouse(183, "mouseReleased", tp["x"], tp["y"], 0)
             await asyncio.sleep(0.3)
             n = await ev(ws, 184, "loadsOnBeam().length")
-            print(f"  loads after clicking it in 3D: {n}")
-            assert n == 0, "3D click did not remove the load"
+            sel = await ev(ws, 1840, "selectedLoadId !== null")
+            print(f"  loads after clicking it in 3D: {n}, selected={sel}")
+            assert n == 1 and sel is True, "3D click should select the load, not remove it"
+            await send_cmd(ws, 185, "Input.dispatchKeyEvent", {"type": "keyDown", "key": "Delete", "code": "Delete", "windowsVirtualKeyCode": 46})
+            await send_cmd(ws, 186, "Input.dispatchKeyEvent", {"type": "keyUp", "key": "Delete", "code": "Delete", "windowsVirtualKeyCode": 46})
+            n = await ev(ws, 187, "loadsOnBeam().length")
+            assert n == 0, "Delete should remove the selected load"
 
             # 14. 변형 확대 배율 버튼
-            await ev(ws, 190, "spawnCharacterAt('heavy', 5.5); document.querySelector('#scaleControl button[data-scale=\"1\"]').click(); 0")
+            await ev(ws, 190, "spawnCharacterAt('excavator', 5.5); document.querySelector('#scaleControl button[data-scale=\"1\"]').click(); 0")
             y1 = await ev(ws, 191, "beamSegments[NUM_SEGS - 1].position.y")
             await ev(ws, 192, "document.querySelector('#scaleControl button[data-scale=\"50\"]').click(); 0")
             y50 = await ev(ws, 193, "beamSegments[NUM_SEGS - 1].position.y")
@@ -304,17 +311,17 @@ async def main():
             await shot(ws, 196, "09_final.png")
 
             # 15. 재료 전환 시 같은 하중 유지 (재료 비교 실험)
-            await ev(ws, 200, "resetExperiment(); spawnCharacterAt('worker', 5.0); spawnCharacterAt('weight100', 4.0); 0")
+            await ev(ws, 200, "resetExperiment(); spawnCharacterAt('worker', 5.0); spawnCharacterAt('pig', 4.0); 0")
             await click_mat(ws, 201, "wood")
             st = json.loads(await ev(ws, 202, "JSON.stringify({mat: currentMatKey, loads: loadsOnBeam().map(c => [c.type, c.xPos]), M: currentMaxMoment})"))
             print(f"Material switch keeps loads: {st}")
-            assert st["mat"] == "wood" and sorted(st["loads"]) == [["weight100", 4.0], ["worker", 5.0]], st
-            assert abs(st["M"] - (75 * 9.81 * 5.0 + 100 * 9.81 * 4.0) / 1000) < 1e-9
+            assert st["mat"] == "wood" and sorted(st["loads"]) == [["pig", 4.0], ["worker", 5.0]], st
+            assert abs(st["M"] - (75 * 9.81 * 5.0 + 150 * 9.81 * 4.0) / 1000) < 1e-9
 
             # 16. 반복 실험 후 GPU 리소스 누수 점검 (geometry 수가 계속 늘지 않아야 함)
             g0 = await ev(ws, 210, "renderer.info.memory.geometries")
             for k in range(3):
-                await ev(ws, 211 + k, "for (const t of ['heavy','car','block500','worker','weight100']) document.getElementById({heavy:'spawnHeavy',car:'spawnCar',block500:'spawnBlock500',worker:'spawnWorker',weight100:'spawnWeight100'}[t]).click(); document.getElementById('btnReset').click(); 0")
+                await ev(ws, 211 + k, "for (const t of ['excavator','tractor','cow','worker','pig']) document.getElementById({excavator:'spawnExcavator',tractor:'spawnTractor',cow:'spawnCow',worker:'spawnWorker',pig:'spawnPig'}[t]).click(); document.getElementById('btnReset').click(); 0")
                 await asyncio.sleep(0.4)
             g1 = await ev(ws, 220, "renderer.info.memory.geometries")
             print(f"  geometries before={g0} after 3 cycles={g1}")
@@ -322,8 +329,8 @@ async def main():
 
             # 17. 미션: 앞선 시나리오로 brittle/residual/rubber 완료, 여기서 lever/thick 완료
             await click_mat(ws, 230, "mild_steel")
-            await ev(ws, 231, "resetExperiment(); spawnCharacterAt('heavy', 1.5); spawnCharacterAt('heavy', 5.5); 0")
-            await ev(ws, 232, "resetExperiment(); spawnCharacterAt('heavy', 5.9); spawnCharacterAt('heavy', 5.0); spawnCharacterAt('heavy', 4.2); 0")
+            await ev(ws, 231, "resetExperiment(); spawnCharacterAt('excavator', 1.5); spawnCharacterAt('excavator', 5.5); 0")
+            await ev(ws, 232, "resetExperiment(); spawnCharacterAt('excavator', 5.9); spawnCharacterAt('excavator', 5.0); spawnCharacterAt('excavator', 4.2); 0")
             await ev(ws, 233, "const s3=document.getElementById('beamHSlider'); s3.value='0.32'; s3.dispatchEvent(new Event('input')); 0")
             st = json.loads(await ev(ws, 234, "JSON.stringify({m: missions, cnt: missionCnt.textContent, s: currentMaxStress, score, pts: MISSIONS.filter(x => missions[x.key]).reduce((a, x) => a + x.pts, 0), badge: scoreBadge.textContent})"))
             print(f"Missions: {st}")
@@ -351,7 +358,7 @@ async def main():
 
             # 19. 실제 처짐은 각도 상한과 무관 (review_02 P1-1): 고무 + 500kg @ 5.69m 를 선형 이론과 비교
             await click_mat(ws, 250, "rubber")
-            await ev(ws, 251, "resetExperiment(); spawnCharacterAt('block500', 5.69); 0")
+            await ev(ws, 251, "resetExperiment(); spawnCharacterAt('cow', 5.69); 0")
             d = await ev(ws, 252, "currentDeflection")
             P, a = 500 * 9.81, 5.69
             d_lin = P * a ** 2 * (3 * L - a) / (6 * 150e6 * I) * 100
@@ -361,7 +368,7 @@ async def main():
 
             # 20. 연성 파괴: 최종 형상 후 파단 + BMD/목록 스냅샷 (review_02 P1-2,3,5)
             await click_mat(ws, 260, "mild_steel")
-            await ev(ws, 261, "resetExperiment(); for (let i=0;i<5;i++) spawnCharacterAt('heavy', 5.9 - i*0.9); 0")
+            await ev(ws, 261, "resetExperiment(); for (let i=0;i<5;i++) spawnCharacterAt('excavator', 5.9 - i*0.9); 0")
             st = json.loads(await ev(ws, 262, "JSON.stringify({broken: isBroken, mode: failureMode, snap: failSnap && failSnap.loads.length, list: loadList.innerText, eps: rootStrainNow, eu: currentMat.eu, perm: currentPermanent})"))
             print(f"Ductile failure: broken={st['broken']} mode={st['mode']} snapLoads={st['snap']} eps={st['eps']} perm={st['perm']:.1f}")
             assert st["broken"] and st["mode"] == "ductile" and st["snap"] == 5
@@ -370,7 +377,7 @@ async def main():
             await shot(ws, 263, "11_ductile_failure.png")
 
             # 21. 재료 전환 중 조기 파괴 → 안내가 실제 적용 개수와 일치 (review_02 P1-6)
-            await ev(ws, 270, "resetExperiment(); spawnCharacterAt('heavy', 5.5); spawnCharacterAt('heavy', 4.5); 0")
+            await ev(ws, 270, "resetExperiment(); spawnCharacterAt('excavator', 5.5); spawnCharacterAt('excavator', 4.5); 0")
             await click_mat(ws, 271, "concrete")
             st = json.loads(await ev(ws, 272, "JSON.stringify({broken: isBroken, toast: document.getElementById('toast').textContent, snap: failSnap && failSnap.count})"))
             print(f"Switch to concrete with 2 heavies: {st}")
@@ -382,17 +389,17 @@ async def main():
 
             # 22. 두께 변경 = 새 시편 (소성 이력이 새 두께와 일관) (review_02 P1-4)
             await click_mat(ws, 280, "mild_steel")
-            await ev(ws, 281, "resetExperiment(); spawnCharacterAt('heavy', 5.9); spawnCharacterAt('heavy', 5.0); spawnCharacterAt('heavy', 4.2); 0")
+            await ev(ws, 281, "resetExperiment(); spawnCharacterAt('excavator', 5.9); spawnCharacterAt('excavator', 5.0); spawnCharacterAt('excavator', 4.2); 0")
             await ev(ws, 282, "const s5=document.getElementById('beamHSlider'); s5.value='0.27'; s5.dispatchEvent(new Event('input')); 0")
             p_slider = await ev(ws, 283, "currentPermanent")
-            p_fresh = await ev(ws, 284, "resetExperiment(); spawnCharacterAt('heavy', 5.9); spawnCharacterAt('heavy', 5.0); spawnCharacterAt('heavy', 4.2); currentPermanent")
+            p_fresh = await ev(ws, 284, "resetExperiment(); spawnCharacterAt('excavator', 5.9); spawnCharacterAt('excavator', 5.0); spawnCharacterAt('excavator', 4.2); currentPermanent")
             print(f"Thickness change: after slider {p_slider:.4f} cm vs fresh specimen {p_fresh:.4f} cm")
             assert abs(p_slider - p_fresh) < 1e-9
             await ev(ws, 285, "const s8=document.getElementById('beamHSlider'); s8.value='0.28'; s8.dispatchEvent(new Event('input')); 0")
 
             # 23. 파괴 임계점 일치 (review_03 P1-1): 콘크리트 500kg@5.69 → σ=σ_u, ε=ε_u, 처짐 = λ × 전체하중 처짐
             await click_mat(ws, 300, "concrete")
-            await ev(ws, 301, "resetExperiment(); spawnCharacterAt('block500', 5.69); 0")
+            await ev(ws, 301, "resetExperiment(); spawnCharacterAt('cow', 5.69); 0")
             st = json.loads(await ev(ws, 302, "JSON.stringify({b: isBroken, s: currentMaxStress, e: rootStrainNow, eu: currentMat.eu, d: currentDeflection, lam: failSnap.crit.alpha, M: currentMaxMoment, note: critNote.textContent, vis: critNote.style.display})"))
             S_ = 0.18 * 0.28 ** 2 / 6; I_ = 0.18 * 0.28 ** 3 / 12
             Pc = 500 * 9.81
@@ -405,7 +412,7 @@ async def main():
             # 24. 두께 슬라이더 연속 조작 중 중간 파괴 → 하중 유실 없음 (review_03 P1-2)
             await click_mat(ws, 310, "mild_steel")
             await ev(ws, 311, "const a1=document.getElementById('beamHSlider'); a1.value='0.15'; a1.dispatchEvent(new Event('input')); a1.dispatchEvent(new Event('change')); 0")
-            await ev(ws, 312, "resetExperiment(); spawnCharacterAt('block500', 2.6); spawnCharacterAt('car', 3.6); spawnCharacterAt('car', 4.6); spawnCharacterAt('car', 5.6); spawnCharacterAt('heavy', 5.0); 0")
+            await ev(ws, 312, "resetExperiment(); spawnCharacterAt('cow', 2.6); spawnCharacterAt('tractor', 3.6); spawnCharacterAt('tractor', 4.6); spawnCharacterAt('tractor', 5.6); spawnCharacterAt('excavator', 5.0); 0")
             st0 = json.loads(await ev(ws, 313, "JSON.stringify({b: isBroken, n: failSnap ? failSnap.count : loadsOnBeam().length})"))
             for i, hv in enumerate([0.16, 0.17, 0.19, 0.22, 0.26, 0.30, 0.35]):
                 await ev(ws, 314 + i, f"(() => {{ const a2=document.getElementById('beamHSlider'); a2.value='{hv}'; a2.dispatchEvent(new Event('input')); }})(); 0")
@@ -413,27 +420,27 @@ async def main():
             st = json.loads(await ev(ws, 323, "JSON.stringify({b: isBroken, loads: loadsOnBeam().map(c => c.type).sort()})"))
             print(f"Slider sweep: start={st0} end={st}")
             assert st0["b"] is True, "시작 상태에서 파괴되어야 중간 파괴 경로를 검증할 수 있음"
-            assert not st["b"] and st["loads"] == ["block500", "car", "car", "car", "heavy"], st
+            assert not st["b"] and st["loads"] == ["cow", "excavator", "tractor", "tractor", "tractor"], st
             await ev(ws, 324, "const a3=document.getElementById('beamHSlider'); a3.value='0.28'; a3.dispatchEvent(new Event('input')); a3.dispatchEvent(new Event('change')); 0")
 
             # 25. 고무 미션: 다른 재료를 거쳐 오면 인정 안 됨 (review_03 P1-3)
             await ev(ws, 330, "missions.rubber = false; 0")
             await click_mat(ws, 331, "rubber")
-            await ev(ws, 332, "resetExperiment(); spawnCharacterAt('block500', 5.5); 0")
+            await ev(ws, 332, "resetExperiment(); spawnCharacterAt('cow', 5.5); 0")
             await click_mat(ws, 333, "mild_steel")
             await ev(ws, 334, "document.getElementById('btnUnload').click(); 0")
             await click_mat(ws, 335, "rubber")
             st = json.loads(await ev(ws, 336, "JSON.stringify({done: missions.rubber, flag: missionFlags.rubberBig})"))
             print(f"Rubber mission after detour: {st}")
             assert st["done"] is False and st["flag"] is False
-            await ev(ws, 337, "spawnCharacterAt('block500', 5.5); document.getElementById('btnUnload').click(); 0")
+            await ev(ws, 337, "spawnCharacterAt('cow', 5.5); document.getElementById('btnUnload').click(); 0")
             st = json.loads(await ev(ws, 338, "JSON.stringify({done: missions.rubber, note: missionNote.textContent, toast: document.getElementById('toast').textContent})"))
             print(f"Rubber mission proper: {st}")
             assert st["done"] is True and "탄성" in st["note"] and "미션 완료" not in st["toast"]   # (review_03 P1-4) 카드 안 안내
 
             # 26. 목재 용어 (review_03 P1-5): σ_pl 초과·σ_u 미만
             await click_mat(ws, 340, "wood")
-            await ev(ws, 341, "resetExperiment(); spawnCharacterAt('car', 5.0); 0")
+            await ev(ws, 341, "resetExperiment(); spawnCharacterAt('tractor', 5.0); 0")
             st = json.loads(await ev(ws, 342, "JSON.stringify({s: currentMaxStress, badge: statusBadge.textContent, bar: stressBarText.textContent, gauge: gaugeTitle.textContent, hl: rowPlastic.classList.contains('highlight')})"))
             print(f"Wood terms: {st}")
             assert 30 < st["s"] < 42 and "비례한도" in st["badge"] and "비례한도" in st["bar"] and "σ_pl" in st["gauge"] and not st["hl"], st
@@ -441,7 +448,7 @@ async def main():
 
             # 27. 순차 재하 임계 보간 (review_04 P1-1,2): 작업자 75kg@5.0 버팀 → 적재블록 500kg@5.69 추가 시 파괴
             await click_mat(ws, 350, "concrete")
-            await ev(ws, 351, "resetExperiment(); spawnCharacterAt('worker', 5.0); spawnCharacterAt('block500', 5.69); 0")
+            await ev(ws, 351, "resetExperiment(); spawnCharacterAt('worker', 5.0); spawnCharacterAt('cow', 5.69); 0")
             st = json.loads(await ev(ws, 352, """JSON.stringify({b: isBroken, crit: failSnap.crit, loads: failSnap.loads.map(c => [c.type, c.weight, c.xPos]),
                 M: currentMaxMoment, d: currentDeflection, people: valPeople.textContent, sumList: loadList.querySelector('.load-sum span:last-child').textContent,
                 note: critNote.textContent})"""))
@@ -454,14 +461,14 @@ async def main():
             print(f"Sequential critical: alpha={st['crit']['alpha']:.4f} (exp {alpha:.4f}) loads={st['loads']} M={st['M']:.3f} d={st['d']:.4f} (exp {d_exp:.4f})")
             print(f"  people='{st['people']}' listSum={st['sumList']} note='{st['note'][:60]}...'")
             assert st["b"] and st["crit"]["mode"] == "increment" and abs(st["crit"]["alpha"] - alpha) < 1e-9
-            assert abs(w["worker"] - 75) < 1e-9 and abs(w["block500"] - 500 * alpha) < 1e-6
+            assert abs(w["worker"] - 75) < 1e-9 and abs(w["cow"] - 500 * alpha) < 1e-6
             assert abs(st["M"] - Mu / 1000) < 1e-9 and abs(float(st["sumList"]) - Mu / 1000) < 0.05
             assert abs(st["d"] - d_exp) / d_exp < 0.01
             await shot(ws, 353, "13_sequential_critical.png")
 
             # 28. 바닥 접촉 구간도 화면 길이 보존 (review_04 P2-1)
             await click_mat(ws, 360, "rubber")
-            await ev(ws, 361, "resetExperiment(); spawnCharacterAt('block500', 3.0); spawnCharacterAt('block500', 5.5); 0")
+            await ev(ws, 361, "resetExperiment(); spawnCharacterAt('cow', 3.0); spawnCharacterAt('cow', 5.5); 0")
             st = json.loads(await ev(ws, 362, """(() => { let worst = 0, touch = 0;
                 for (let i = 1; i < visPts.length; i++) {
                   const a = visPts[i-1], b = visPts[i];
@@ -511,24 +518,24 @@ async def main():
 
             # 31. 실제 도크 클릭 경로 + 개별 제거 후 추가에서도 '새 하중' 판별 (review_05 P2-3) — 목재 M_u = 98.8 kN·m
             await click_mat(ws, 390, "wood")
-            await ev(ws, 391, "resetExperiment(); document.getElementById('spawnWorker').click(); document.getElementById('spawnWeight100').click(); 0")
+            await ev(ws, 391, "resetExperiment(); document.getElementById('spawnWorker').click(); document.getElementById('spawnPig').click(); 0")
             n_before = await ev(ws, 392, "loadsOnBeam().length")
-            await ev(ws, 393, "removeLoadById(loadsOnBeam().find(c => c.type === 'weight100').id); document.getElementById('spawnCar').click(); 0")
+            await ev(ws, 393, "removeLoadById(loadsOnBeam().find(c => c.type === 'pig').id); document.getElementById('spawnTractor').click(); 0")
             mid = json.loads(await ev(ws, 394, "JSON.stringify({b: isBroken, n: loadsOnBeam().length})"))
-            await ev(ws, 395, "document.getElementById('spawnHeavy').click(); 0")
+            await ev(ws, 395, "document.getElementById('spawnExcavator').click(); 0")
             st = json.loads(await ev(ws, 396, "JSON.stringify({b: isBroken, crit: failSnap && failSnap.crit, loads: failSnap && failSnap.loads.map(c => [c.type, Math.round(c.frac*1e4)/1e4]), M: currentMaxMoment})"))
             print(f"Dock path after removal: before={n_before} mid={mid} -> {st}")
             fr = dict((k, v) for k, v in st["loads"])
             assert n_before == 2 and not mid["b"] and mid["n"] == 2
-            assert st["b"] and st["crit"]["mode"] == "increment" and st["crit"]["added"] == ["heavy"]
-            assert fr["worker"] == 1.0 and fr["car"] == 1.0 and 0 < fr["heavy"] < 1 and abs(st["M"] - 42 * 0.18 * 0.28 ** 2 / 6 * 1000) < 1e-6
+            assert st["b"] and st["crit"]["mode"] == "increment" and st["crit"]["added"] == ["excavator"]
+            assert fr["worker"] == 1.0 and fr["tractor"] == 1.0 and 0 < fr["excavator"] < 1 and abs(st["M"] - 42 * 0.18 * 0.28 ** 2 / 6 * 1000) < 1e-6
 
             # 32. 장면 구성: 도로·차 없음, 호수·낭떠러지 있음. 배치: 왼쪽 미션 열 / 오른쪽 그래프·상태 열 / 아래 도크+부재 설정 / 종료 버튼은 오른쪽 맨 아래
             st = json.loads(await ev(ws, 400, """(() => { const R = id => document.getElementById(id).getBoundingClientRect().toJSON();
                 return JSON.stringify({road: typeof roadCars !== 'undefined', water: scene.children.includes(water), face: cliffFaceX(0),
                 curveInPanel: !!curveCanvas.closest('#sidePanel'), bmdInPanel: !!bmdCanvas.closest('#sidePanel'), readoutInPanel: !!document.getElementById('valMoment').closest('#sidePanel'),
                 commentaryInPanel: !!document.getElementById('commentaryText').closest('#sidePanel'), matInBottom: !!document.getElementById('matGrid').closest('#bottomBar'),
-                sliderInBottom: !!document.getElementById('beamHSlider').closest('#bottomBar'), dockInBottom: !!document.getElementById('spawnHeavy').closest('#bottomBar'),
+                sliderInBottom: !!document.getElementById('beamHSlider').closest('#bottomBar'), dockInBottom: !!document.getElementById('spawnExcavator').closest('#bottomBar'),
                 endInFoot: !!document.getElementById('btnEnd').closest('#panelFoot'), actionsInFoot: !!document.getElementById('btnUnload').closest('#panelFoot'),
                 mission: R('missionPanel'), panel: R('sidePanel'), bottom: R('bottomBar'), dock: R('dockBar'), setup: R('setupBar'), end: R('btnEnd'), curve: R('curveCanvas'), bmd: R('bmdCanvas'),
                 chartH: getComputedStyle(curveCanvas).height, W: innerWidth, H: innerHeight, scene: sceneRect()}); })()"""))
@@ -591,14 +598,14 @@ async def main():
             await asyncio.sleep(0.3)
             st = json.loads(await ev(ws, 4311, "JSON.stringify(loadsOnBeam().map(c => [c.type, c.xPos]))"))
             print(f"  iso drop: {st}")
-            assert len(st) == 1 and st[0][0] == "block500" and abs(st[0][1] - 4.0) < 0.35, st
+            assert len(st) == 1 and st[0][0] == "cow" and abs(st[0][1] - 4.0) < 0.35, st
             await shot(ws, 4312, "16_iso_view.png")
             await ev(ws, 4313, "btnView.click(); resetExperiment(); 0")
             await wait_view(4314)
             assert await ev(ws, 4315, "isSectionView()") is True
 
             # 34. 보 위 하중물을 실제 마우스로 끌어 옮기기 (x=2.0 → 5.5), M 실시간 갱신
-            await ev(ws, 420, "missionFlags.leverNear = false; missionFlags.leverFar = false; spawnCharacterAt('heavy', 2.0); 0")
+            await ev(ws, 420, "missionFlags.leverNear = false; missionFlags.leverFar = false; spawnCharacterAt('excavator', 2.0); 0")
             src = json.loads(await ev(ws, 421, LOAD_POS_JS))
             dst = json.loads(await ev(ws, 422, "(() => { const p = samplePts(visPts, 5.5); const v = new THREE.Vector3(p.x, p.y + 0.5, 0).project(camera); return JSON.stringify({x: (v.x + 1) / 2 * innerWidth, y: (1 - v.y) / 2 * innerHeight}); })()"))
             await mouse(423, "mouseMoved", src["x"], src["y"], 0)
@@ -614,14 +621,14 @@ async def main():
             await asyncio.sleep(0.3)
             st = json.loads(await ev(ws, 439, "JSON.stringify({loads: loadsOnBeam().map(c => [c.type, c.xPos]), M: currentMaxMoment, near: missionFlags.leverNear, far: missionFlags.leverFar, ghost: dragGhost.style.display})"))
             print(f"Move drag: captions={caps} -> {st}")
-            assert len(st["loads"]) == 1 and st["loads"][0][0] == "heavy" and abs(st["loads"][0][1] - 5.5) < 0.3, st
+            assert len(st["loads"]) == 1 and st["loads"][0][0] == "excavator" and abs(st["loads"][0][1] - 5.5) < 0.3, st
             assert abs(st["M"] - 5000 * 9.81 * st["loads"][0][1] / 1000) < 1e-6
             assert st["near"] and st["far"] and st["ghost"] == "none"
             assert all("x = " in c and "kN·m" in c for c in caps), caps
 
             # 35. 옮기다 파괴: 콘크리트, 적재블록 x=1.0 → 3.0 으로 옮기면 x_cr = M_u / P 에서 파괴
             await click_mat(ws, 450, "concrete")
-            await ev(ws, 451, "resetExperiment(); spawnCharacterAt('block500', 1.0); setLoadX(loadsOnBeam()[0].id, 3.0); 0")
+            await ev(ws, 451, "resetExperiment(); spawnCharacterAt('cow', 1.0); setLoadX(loadsOnBeam()[0].id, 3.0); 0")
             st = json.loads(await ev(ws, 452, """JSON.stringify({b: isBroken, crit: failSnap && failSnap.crit, M: currentMaxMoment, x: characters[0].xPos,
                 listX: failSnap && failSnap.loads[0].xPos, badge: statusBadge.textContent, note: critNote.textContent, Min: failSnap && failSnap.Min})"""))
             Mu_c = 3.5e6 * S_
@@ -632,7 +639,10 @@ async def main():
             assert abs(st["Min"] - Mu_c / 1000) < 1e-9 and "x=1.68m" in st["badge"] and "끌어 옮기다가" in st["note"]
 
             # 36. 파괴 후 보 파편·하중물이 호수에 빠져 가라앉음 (첨벙)
-            await asyncio.sleep(3.5)
+            for _k in range(60):   # 헤드리스 브라우저는 실제 시간보다 느리게 돌 수 있으니, 가라앉을 때까지 기다린다
+                await asyncio.sleep(0.5)
+                if await ev(ws, 4590, "characters.every(c => c.mesh.position.y < WATER_Y + 0.01) && debrisGroup.children.every(d => d.position.y < WATER_Y + 0.01)") is True:
+                    break
             st = json.loads(await ev(ws, 460, """JSON.stringify({splash: splashCount, debrisMaxY: Math.max(...debrisGroup.children.map(d => d.position.y)),
                 debrisMinY: Math.min(...debrisGroup.children.map(d => d.position.y)), loadY: characters.map(c => c.mesh.position.y), W: WATER_Y, bed: LAKE_BED})"""))
             print(f"Sinking: {st}")
@@ -642,7 +652,7 @@ async def main():
 
             # 37. 옮길 때 다른 하중을 통과하지 못하고 닿는 곳에서 멈춤 (review_11 P2-2, review_12 P1)
             await click_mat(ws, 470, "mild_steel")
-            st = json.loads(await ev(ws, 471, """(() => { resetExperiment(); spawnCharacterAt('heavy', 3.0); spawnCharacterAt('worker', 5.0);
+            st = json.loads(await ev(ws, 471, """(() => { resetExperiment(); spawnCharacterAt('excavator', 3.0); spawnCharacterAt('worker', 5.0);
                 const w = loadsOnBeam().find(c => c.type === 'worker'); const r = setLoadX(w.id, 1.0);
                 return JSON.stringify({wx: w.xPos, r, M: currentMaxMoment, phone: getComputedStyle(valPeople.closest('tr')).display}); })()"""))
             gap = 0.86 / 2 + 0.32 / 2 + 0.02
@@ -652,15 +662,15 @@ async def main():
 
             # 38. review_12 P1 재현 상태: 콘크리트, 작업자 1.50 · 블록 1.06 → 블록을 오른쪽으로 끌어도 건너뛰지 않음 (파괴·겹침 없음)
             await click_mat(ws, 480, "concrete")
-            st = json.loads(await ev(ws, 481, """(() => { resetExperiment(); spawnCharacterAt('worker', 1.50); spawnCharacterAt('block500', 1.06);
-                const b = loadsOnBeam().find(c => c.type === 'block500'); const r1 = setLoadX(b.id, 1.55); const r2 = setLoadX(b.id, 2.2);
+            st = json.loads(await ev(ws, 481, """(() => { resetExperiment(); spawnCharacterAt('worker', 1.50); spawnCharacterAt('cow', 1.06);
+                const b = loadsOnBeam().find(c => c.type === 'cow'); const r1 = setLoadX(b.id, 1.55); const r2 = setLoadX(b.id, 2.2);
                 return JSON.stringify({bx: b.xPos, r1, r2, broken: isBroken}); })()"""))
             print(f"No jump over neighbour: {st}")
             assert st["bx"] == 1.06 and st["r1"] == "blocked" and st["r2"] == "blocked" and not st["broken"], st
             # 빈 구간 안에서 옮기다 파괴 → 임계 위치도 겹치지 않음: 작업자 3.0, 블록 1.0 → 2.5
-            st = json.loads(await ev(ws, 482, """(() => { resetExperiment(); spawnCharacterAt('worker', 3.0); spawnCharacterAt('block500', 1.0);
-                const b = loadsOnBeam().find(c => c.type === 'block500'); setLoadX(b.id, 2.5);
-                const L = failSnap.loads; const wk = L.find(c => c.type === 'worker'), bl = L.find(c => c.type === 'block500');
+            st = json.loads(await ev(ws, 482, """(() => { resetExperiment(); spawnCharacterAt('worker', 3.0); spawnCharacterAt('cow', 1.0);
+                const b = loadsOnBeam().find(c => c.type === 'cow'); setLoadX(b.id, 2.5);
+                const L = failSnap.loads; const wk = L.find(c => c.type === 'worker'), bl = L.find(c => c.type === 'cow');
                 return JSON.stringify({broken: isBroken, mode: failSnap.crit.mode, xcr: bl.xPos, gap: wk.xPos - bl.xPos, M: currentMaxMoment}); })()"""))
             xcr2 = (3.5e6 * S_ - 75 * 9.81 * 3.0) / (500 * 9.81)
             print(f"Move failure inside gap: {st} (exp xcr={xcr2:.4f})")
@@ -672,14 +682,14 @@ async def main():
             lines = {}
             await ev(ws, 491, "resetExperiment(); 0")
             lines["empty"] = json.loads(await ev(ws, 492, "JSON.stringify({t: commentaryText.textContent, c: commentaryText.className, f: commentaryAvatar.textContent})"))
-            await ev(ws, 493, "spawnCharacterAt('car', 3.0); 0")
+            await ev(ws, 493, "spawnCharacterAt('tractor', 3.0); 0")
             lines["elastic"] = json.loads(await ev(ws, 494, "JSON.stringify({t: commentaryText.textContent, c: commentaryText.className, pct: Math.round(currentMaxStress / currentMat.fy * 100)})"))
-            await ev(ws, 495, "spawnCharacterAt('heavy', 5.5); spawnCharacterAt('heavy', 4.5); spawnCharacterAt('heavy', 3.5); spawnCharacterAt('heavy', 2.5); 0")
+            await ev(ws, 495, "spawnCharacterAt('excavator', 5.5); spawnCharacterAt('excavator', 4.5); spawnCharacterAt('excavator', 3.5); spawnCharacterAt('excavator', 2.5); 0")
             lines["plastic"] = json.loads(await ev(ws, 496, "JSON.stringify({t: commentaryText.textContent, c: commentaryText.className, over: currentMaxStress > currentMat.fy, b: isBroken})"))
             await ev(ws, 497, "btnUnload.click(); 0")
             lines["residual"] = json.loads(await ev(ws, 498, "JSON.stringify({t: commentaryText.textContent, c: commentaryText.className, dp: currentPermanent})"))
             await click_mat(ws, 499, "concrete")
-            await ev(ws, 500, "resetExperiment(); spawnCharacterAt('heavy', 5.5); 0")
+            await ev(ws, 500, "resetExperiment(); spawnCharacterAt('excavator', 5.5); 0")
             lines["broken"] = json.loads(await ev(ws, 501, "JSON.stringify({t: commentaryText.textContent, c: commentaryText.className, f: commentaryAvatar.textContent, b: isBroken})"))
             for k, v in lines.items():
                 print(f"  commentary[{k}]: ({v['c']}) {v['t'][:70]}…")
@@ -692,7 +702,7 @@ async def main():
 
             # 40. σ-ε 선도 클릭 → 단면계수 개념 페이지 (현재 b·h·S 값 표시) + 'learn' 미션, Esc 로 닫힘
             await click_mat(ws, 505, "mild_steel")
-            await ev(ws, 506, "resetExperiment(); spawnCharacterAt('car', 4.0); 0")
+            await ev(ws, 506, "resetExperiment(); spawnCharacterAt('tractor', 4.0); 0")
             learn0 = await ev(ws, 507, "missions.learn")
             await ev(ws, 508, "document.getElementById('curveCard').click(); 0")
             await asyncio.sleep(0.4)
@@ -739,7 +749,7 @@ async def main():
             # 42. 좁은 화면(휴대폰)에서는 하중 제거·시편 교체 버튼이 하단 부재 바로 옮겨지고, 미션 카드가 접힌 채 보 고정단을 가리지 않음
             await send_cmd(ws, 540, "Emulation.setDeviceMetricsOverride", {"width": 390, "height": 844, "deviceScaleFactor": 1, "mobile": True})
             await asyncio.sleep(0.6)
-            st = json.loads(await ev(ws, 541, """(() => { spawnCharacterAt('heavy', 5.5); const v = new THREE.Vector3(0.4, 0, 0).project(camera);
+            st = json.loads(await ev(ws, 541, """(() => { spawnCharacterAt('excavator', 5.5); const v = new THREE.Vector3(0.4, 0, 0).project(camera);
                 const el = document.elementFromPoint((v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight);
                 return JSON.stringify({w: innerWidth, inSetup: !!btnUnload.closest('#setupRow'), collapsed: missionPanel.classList.contains('collapsed'), rootEl: el && el.id,
                     mini: getComputedStyle(scoreMini).display, sw: document.documentElement.scrollWidth}); })()"""))
@@ -753,13 +763,13 @@ async def main():
 
             # 43. review_14 P1: 순차 재하 파괴 대사의 M 은 임계 순간 M (= M_u), 고무 파괴는 취성이 아님, 두께 감소 파괴 후 개념 페이지는 임계 단면
             await click_mat(ws, 550, "concrete")
-            st = json.loads(await ev(ws, 551, """(() => { resetExperiment(); spawnCharacterAt('worker', 5.0); spawnCharacterAt('block500', 5.69);
+            st = json.loads(await ev(ws, 551, """(() => { resetExperiment(); spawnCharacterAt('worker', 5.0); spawnCharacterAt('cow', 5.69);
                 return JSON.stringify({b: isBroken, mode: failSnap.crit.mode, M: currentMaxMoment, Min: failSnap.Min, t: commentaryText.textContent}); })()"""))
             print(f"Sequential failure commentary: M={st['M']:.3f} Min={st['Min']:.3f} '{st['t'][:60]}…'")
             assert st["b"] and st["mode"] == "increment" and abs(st["M"] - 3.5e6 * S_ / 1000) < 1e-9 and st["Min"] > 30
             assert f"임계 M = {st['M']:.1f} kN·m" in st["t"] and f"{st['Min']:.1f}" not in st["t"], st["t"]
             await click_mat(ws, 552, "rubber")
-            st = json.loads(await ev(ws, 553, "(() => { resetExperiment(); for (let i = 0; i < 6; i++) spawnCharacterAt('heavy', 5.8 - i * 0.9); return JSON.stringify({b: isBroken, t: commentaryText.textContent, badge: statusBadge.textContent, toast: toast.textContent}); })()"))
+            st = json.loads(await ev(ws, 553, "(() => { resetExperiment(); for (let i = 0; i < 6; i++) spawnCharacterAt('excavator', 5.8 - i * 0.9); return JSON.stringify({b: isBroken, t: commentaryText.textContent, badge: statusBadge.textContent, toast: toast.textContent}); })()"))
             print(f"Rubber failure commentary: broken={st['b']} badge='{st['badge']}' '{st['t'][:70]}…'")
             assert st["b"] and "취성 파괴예요" not in st["t"] and "고무" in st["t"] and "극한강도" in st["t"], st["t"]
             assert "취성" not in st["badge"] and "초탄성" in st["badge"] and "취성" not in st["toast"] and "초탄성" in st["toast"], (st["badge"], st["toast"])   # review_15 P1-2
@@ -775,7 +785,7 @@ async def main():
             await ev(ws, 556, "const sA=document.getElementById('beamHSlider'); sA.value='0.28'; sA.dispatchEvent(new Event('input')); 0")
 
             # 44. review_14 P2: 첫 하중이 바로 파괴해도 first 미션 완료 / 랭킹 11위 밖 등록 행 표시 / 50위 밖은 저장 안 됨
-            st = json.loads(await ev(ws, 560, "(() => { resetMissions(); resetExperiment(); spawnCharacterAt('heavy', 5.5); return JSON.stringify({b: isBroken, first: missions.first, brittle: missions.brittle, n: loadsOnBeam().length}); })()"))
+            st = json.loads(await ev(ws, 560, "(() => { resetMissions(); resetExperiment(); spawnCharacterAt('excavator', 5.5); return JSON.stringify({b: isBroken, first: missions.first, brittle: missions.brittle, n: loadsOnBeam().length}); })()"))
             print(f"First load breaks beam: {st}")
             assert st["b"] and st["first"] and st["brittle"] and st["n"] == 0, st
             st = json.loads(await ev(ws, 561, """(() => { localStorage.removeItem('cantilever.ranking');
@@ -799,7 +809,7 @@ async def main():
 
             # 45. (번외 index_plus.html 전용) review_17: σ 타일 막대 = 숫자와 같은 σ_y 기준 / 단축키가 드래그·자동 반복 중 무시 / 점수 팝업이 모달 위·층층이 / 연성 안내(중장비 3개 + 23 cm) 재현
             if await ev(ws, 570, "typeof updateStatTiles === 'function'") is True:
-                st = json.loads(await ev(ws, 571, """(() => { resetMissions(); document.querySelector('.mat-btn[data-mat="mild_steel"]').click(); resetExperiment(); spawnCharacterAt('heavy', 5.52); spawnCharacterAt('heavy', 4.62); spawnCharacterAt('heavy', 3.72);
+                st = json.loads(await ev(ws, 571, """(() => { resetMissions(); document.querySelector('.mat-btn[data-mat="mild_steel"]').click(); resetExperiment(); spawnCharacterAt('excavator', 5.52); spawnCharacterAt('excavator', 4.62); spawnCharacterAt('excavator', 3.72);
                     const num = +document.getElementById('tileSv').firstChild.nodeValue, bar = parseFloat(document.getElementById('tileSb').style.width);
                     const key = (t, k) => window.dispatchEvent(new KeyboardEvent('keydown', Object.assign({key: k, bubbles: true}, t)));
                     const n0 = loadsOnBeam().length; isDragging = true; key({}, '1'); isDragging = false; const n1 = loadsOnBeam().length;
@@ -825,20 +835,20 @@ async def main():
                 await ev(ws, 574, "document.querySelectorAll('.score-pop').forEach(e => e.remove()); localStorage.clear(); resetMissions(); resetExperiment(); 0")
 
             # 46. (번외) 보가 부러져도 점수는 남고, 실패 카드에서 새 시편을 받으면 0점에서 다시 시작
-            if await ev(ws, 580, "typeof showFailCard === 'function'") is True:
+            if await ev(ws, 580, "typeof openWhy === 'function'") is True:
                 await click_mat(ws, 581, "concrete")
-                await ev(ws, 582, "resetMissions(); resetExperiment(); spawnCharacterAt('heavy', 5.5); 0")
+                await ev(ws, 582, "resetMissions(); resetExperiment(); spawnCharacterAt('excavator', 5.5); 0")
                 await asyncio.sleep(2.2)
-                fc = json.loads(await ev(ws, 583, "JSON.stringify({b: isBroken, show: failCard.classList.contains('show'), sub: failSub.textContent, score, pts: MISSIONS.filter(x => missions[x.key]).reduce((a, x) => a + x.pts, 0), cnt: missionCnt.textContent})"))
+                fc = json.loads(await ev(ws, 583, "JSON.stringify({b: isBroken, show: whyModal.classList.contains('open'), sub: whyText.textContent, score, pts: MISSIONS.filter(x => missions[x.key]).reduce((a, x) => a + x.pts, 0), cnt: missionCnt.textContent})"))
                 print(f"Failure card keeps score: {fc}")
-                assert fc["b"] and fc["show"] and "남아" in fc["sub"] and fc["score"] == fc["pts"] == 200 and fc["cnt"] == "2 / 12", fc
-                assert await ev(ws, 584, "(() => { const r = btnFailRetry.getBoundingClientRect(); const h = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!h && (h === btnFailRetry || btnFailRetry.contains(h)); })()") is True, "retry button must be clickable"
-                await shot(ws, 585, "18_failure_card.png")
-                await ev(ws, 586, "btnFailRetry.click(); 0")
-                re = json.loads(await ev(ws, 587, "JSON.stringify({show: failCard.classList.contains('show'), broken: isBroken, loads: loadsOnBeam().length, score})"))
+                assert fc["b"] and fc["show"] and "σ = M / S" in fc["sub"] and fc["score"] == fc["pts"] == 200 and fc["cnt"] == "2 / 12", fc
+                assert await ev(ws, 584, "(() => { const r = btnWhyRetry.getBoundingClientRect(); const h = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!h && (h === btnWhyRetry || btnWhyRetry.contains(h)); })()") is True, "retry button must be clickable"
+                await shot(ws, 585, "18_why_window.png")
+                await ev(ws, 586, "btnWhyRetry.click(); 0")
+                re = json.loads(await ev(ws, 587, "JSON.stringify({show: whyModal.classList.contains('open'), broken: isBroken, loads: loadsOnBeam().length, score})"))
                 print(f"After retry: {re}")
                 assert not re["show"] and not re["broken"] and re["loads"] == 0 and re["score"] == 0, re
-                await ev(ws, 588, "spawnCharacterAt('block500', 1.0); 0")
+                await ev(ws, 588, "spawnCharacterAt('cow', 1.0); 0")
                 assert await ev(ws, 589, "missions.first") is True, "new run can earn points again"
                 await ev(ws, 590, "resetMissions(); resetExperiment(); 0")
 
@@ -847,7 +857,7 @@ async def main():
                 await send_cmd(ws, 601, "Emulation.setDeviceMetricsOverride", {"width": 390, "height": 844, "deviceScaleFactor": 1, "mobile": True})
                 await send_cmd(ws, 602, "Emulation.setTouchEmulationEnabled", {"enabled": True, "maxTouchPoints": 5})
                 await asyncio.sleep(0.8)
-                await ev(ws, 603, "resetMissions(); resetExperiment(); 0")
+                await ev(ws, 603, "hideWhy(); resetMissions(); resetExperiment(); 0")
                 await ev(ws, 604, "document.querySelector('.mat-btn[data-mat=\"mild_steel\"]').click(); 0")
                 tid = [6100]
                 async def touch_path(pts):
@@ -866,16 +876,19 @@ async def main():
                     return [(a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n) for k in range(n + 1)]
                 # 보 위 점(화면 좌표) 계산: 보의 s 위치 기준
                 BEAM_SCREEN = "(s) => { const pt = visPts.reduce((best, p) => Math.abs(p.s - s) < Math.abs(best.s - s) ? p : best); const cr = canvas.getBoundingClientRect(); const v = new THREE.Vector3(pt.x, pt.y + BEAM_H / 2, 0).project(camera); return [cr.left + (v.x + 1) / 2 * cr.width, cr.top + (1 - v.y) / 2 * cr.height]; }"
-                dock = json.loads(await ev(ws, 605, "JSON.stringify((() => { const r = document.getElementById('spawnHeavy').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })())"))
+                dock = json.loads(await ev(ws, 605, "JSON.stringify((() => { const r = document.getElementById('spawnExcavator').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })())"))
                 target = json.loads(await ev(ws, 606, f"JSON.stringify(({BEAM_SCREEN})(3.0))"))
                 await touch_path(line(dock, target))
                 st = json.loads(await ev(ws, 607, "JSON.stringify({n: loadsOnBeam().length, x: loadsOnBeam().length ? loadsOnBeam()[0].xPos : null, b: isBroken})"))
                 print(f"Touch drop from dock: {st}")
                 assert st["n"] == 1 and not st["b"] and st["x"] is not None and abs(st["x"] - 3.0) < 0.2, st
                 # 보 위 하중을 손가락으로 끌어 옮기기 (x 3.0 → 1.5)
-                cen = json.loads(await ev(ws, 608, "JSON.stringify((() => { const c = loadsOnBeam()[0]; const cr = canvas.getBoundingClientRect(); const v = new THREE.Box3().setFromObject(c.mesh).getCenter(new THREE.Vector3()).project(camera); return [cr.left + (v.x + 1) / 2 * cr.width, cr.top + (1 - v.y) / 2 * cr.height]; })())"))
                 goal = json.loads(await ev(ws, 609, f"JSON.stringify(({BEAM_SCREEN})(1.5))"))
-                await touch_path(line(cen, goal))
+                for _try in range(3):   # 떠 있는 하중물은 매 순간 조금씩 튀므로, 잡히지 않으면 다시 잡아 끈다
+                    cen = json.loads(await ev(ws, 608, "JSON.stringify((() => { const c = loadsOnBeam()[0]; const cr = canvas.getBoundingClientRect(); const v = new THREE.Box3().setFromObject(c.mesh).getCenter(new THREE.Vector3()).project(camera); return [cr.left + (v.x + 1) / 2 * cr.width, cr.top + (1 - v.y) / 2 * cr.height]; })())"))
+                    await touch_path(line(cen, goal))
+                    if abs(json.loads(await ev(ws, 6095, "JSON.stringify(loadsOnBeam()[0].xPos)")) - 1.5) < 0.2:
+                        break
                 st = json.loads(await ev(ws, 610, "JSON.stringify({x: loadsOnBeam()[0].xPos, move: missions.move})"))
                 print(f"Touch move on beam: {st}")
                 assert abs(st["x"] - 1.5) < 0.2 and st["move"], st
@@ -886,6 +899,8 @@ async def main():
                 print(f"Tap material: {mk}")
                 assert mk == "concrete", mk
                 await shot(ws, 613, "20_mobile_touch.png")
+                await asyncio.sleep(2.2)   # 콘크리트를 누르면 보가 깨져 설명 창이 뜨므로 닫고 진행
+                await ev(ws, 6131, "hideWhy(); 0")
                 # 휴대폰에서 개념 페이지·종료 모달도 탭으로 열리고, 닫는 버튼이 화면 안에 있어야 함
                 cc = json.loads(await ev(ws, 617, "JSON.stringify((() => { const r = curveCard.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })())"))
                 await tap(cc[0], cc[1])
@@ -907,6 +922,55 @@ async def main():
                 await send_cmd(ws, 615, "Emulation.clearDeviceMetricsOverride")
                 await asyncio.sleep(0.6)
                 await ev(ws, 616, "resetMissions(); resetExperiment(); document.querySelector('.mat-btn[data-mat=\"mild_steel\"]').click(); 0")
+
+            # 48. (번외) 표지 · 도크 순서 · 통통 튐 · 선택 후 ← → 이동 · Delete 제거 · 다시하기 · 설명 창 · 표 글자 · 배경음악
+            if await ev(ws, 650, "typeof selectLoad === 'function' && typeof openWhy === 'function'") is True:
+                order = await ev(ws, 651, "JSON.stringify([...document.querySelectorAll('#dockBar .spawner-card')].map(b => b.querySelector('.spawner-name').textContent + ' ' + b.querySelector('.spawner-weight').textContent))")
+                print(f"Dock order: {order}")
+                assert order == '["작업자 75 kg","돼지 150 kg","소 500 kg","트랙터 1,500 kg","포크레인 5,000 kg"]', order
+                fs = await ev(ws, 652, "parseFloat(getComputedStyle(document.querySelector('.readout-table td.val')).fontSize)")
+                assert fs >= 16, f"readout value font {fs}px"
+                await ev(ws, 653, "resetMissions(); resetExperiment(); spawnCharacterAt('pig', 3.0); 0")
+                y0 = await ev(ws, 654, "characters[characters.length - 1].mesh.position.y")
+                await asyncio.sleep(0.13)
+                y1 = await ev(ws, 655, "characters[characters.length - 1].mesh.position.y")
+                await asyncio.sleep(0.13)
+                y2 = await ev(ws, 656, "characters[characters.length - 1].mesh.position.y")
+                print(f"Bounce y samples: {y0:.4f} {y1:.4f} {y2:.4f}")
+                assert max(y0, y1, y2) - min(y0, y1, y2) > 0.005, "load should keep bouncing"
+                # 클릭으로 선택 → ← 로 옮기기 → Delete 로 제거
+                cid = await ev(ws, 657, "loadsOnBeam()[0].id")
+                await ev(ws, 658, f"selectLoad({cid}); 0")
+                x0 = await ev(ws, 659, "loadsOnBeam()[0].xPos")
+                await send_cmd(ws, 660, "Input.dispatchKeyEvent", {"type": "keyDown", "key": "ArrowLeft", "code": "ArrowLeft", "windowsVirtualKeyCode": 37})
+                await send_cmd(ws, 661, "Input.dispatchKeyEvent", {"type": "keyUp", "key": "ArrowLeft", "code": "ArrowLeft", "windowsVirtualKeyCode": 37})
+                x1 = await ev(ws, 662, "loadsOnBeam()[0].xPos")
+                print(f"Arrow move: {x0:.2f} -> {x1:.2f}, marker={await ev(ws, 663, 'selMarker.visible')}")
+                assert abs((x0 - x1) - 0.05) < 1e-6, (x0, x1)
+                await send_cmd(ws, 664, "Input.dispatchKeyEvent", {"type": "keyDown", "key": "Delete", "code": "Delete", "windowsVirtualKeyCode": 46})
+                await send_cmd(ws, 665, "Input.dispatchKeyEvent", {"type": "keyUp", "key": "Delete", "code": "Delete", "windowsVirtualKeyCode": 46})
+                n_after = await ev(ws, 666, "loadsOnBeam().length")
+                assert n_after == 0, n_after
+                # 설명 창: 보를 부러뜨리고 2.2 초 뒤 열리는지, 내용과 빨간 점
+                await click_mat(ws, 670, "concrete")
+                await ev(ws, 671, "resetMissions(); resetExperiment(); spawnCharacterAt('excavator', 5.5); 0")
+                await asyncio.sleep(2.2)
+                wy = json.loads(await ev(ws, 672, "JSON.stringify({open: whyModal.classList.contains('open'), text: whyText.textContent, cw: whyCanvas.width, fail: !!failMarker, card: !!document.getElementById('failCard')})"))
+                print(f"Why window: open={wy['open']} text='{wy['text'][:60]}…'")
+                assert wy["open"] and "σ = M / S" in wy["text"] and "왜 부러졌나요" in wy["text"], wy
+                await shot(ws, 673, "23_why_window.png")
+                await ev(ws, 674, "btnWhyOk.click(); 0")
+                # 다시하기 (오른쪽 아래 버튼): 하중·파괴·점수 모두 처음으로
+                rr = json.loads(await ev(ws, 675, "JSON.stringify((() => { const r = btnRestart.getBoundingClientRect(); return {x: r.left + r.width / 2, y: r.top + r.height / 2, inside: r.bottom <= innerHeight && r.right <= innerWidth}; })())"))
+                assert rr["inside"], rr
+                await ev(ws, 676, "btnRestart.click(); 0")
+                st = json.loads(await ev(ws, 677, "JSON.stringify({b: isBroken, n: loadsOnBeam().length, score, open: whyModal.classList.contains('open')})"))
+                assert not st["b"] and st["n"] == 0 and st["score"] == 0 and not st["open"], st
+                # 배경음악: 표지를 넘기면 재생 시작
+                bg = await ev(ws, 678, "bgmTimer !== null && bgmGain !== null")
+                assert bg is True, "background music should start with the game"
+                print("Restart, why window, music, dock order: ok")
+                await ev(ws, 679, "resetMissions(); resetExperiment(); 0")
 
             errors = [e for e in EVENTS if e["method"] == "Runtime.exceptionThrown"
                       or (e["method"] == "Runtime.consoleAPICalled" and e["params"]["type"] in ("error", "warning"))
