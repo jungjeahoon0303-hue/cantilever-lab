@@ -1,0 +1,3589 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>버텨라 캔틸레버 · Voxel Cantilever Lab</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏗️</text></svg>">
+<!-- IBM Plex Sans KR & IBM Plex Mono, Fredoka for arcade feel -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+KR:wght@400;600;700&display=swap" rel="stylesheet">
+<!-- Three.js (로컬 우선, CDN 백업) -->
+<script src="three.min.js"></script>
+<script>
+if (!window.THREE) {
+  document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>');
+}
+</script>
+<style>
+:root {
+  --bg-sky: #a4e5ff;
+  --panel-bg: rgba(255, 255, 255, 0.92);
+  --panel-border: #2c3e50;
+  --accent: #ff4757;
+  --ui-blue: #2ed573;
+  --text-main: #2f3542;
+  --text-muted: #747d8c;
+  --font-arcade: 'Fredoka', 'IBM Plex Sans KR', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+  --col-l: 262px;      /* 왼쪽 미션 열 너비 */
+  --col-r: 400px;      /* 오른쪽 그래프·상태 열 너비 */
+  --edge: 16px;        /* 화면 가장자리 여백 */
+  --chart-h: 220px;    /* σ-ε 선도 높이 */
+  --bmd-h: 150px;      /* 휨모멘트도 높이 */
+}
+
+* { box-sizing: border-box; user-select: none; -webkit-user-select: none; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-sky); font-family: var(--font-arcade); color: var(--text-main); }
+
+#canvas3d { width: 100%; height: 100%; display: block; touch-action: none; }
+
+/* ── 공통 패널 모양 ── */
+.panel {
+  background: var(--panel-bg); border: 3px solid var(--panel-border);
+  box-shadow: 4px 4px 0 #1e272e; border-radius: 14px;
+}
+.section-title { font-size: 0.82rem; font-weight: 700; color: #57606f; letter-spacing: 0.2px; margin-bottom: 4px; display:flex; align-items:center; gap:6px; }
+.hint-inline { font-size: 0.68rem; font-weight: 600; color: #a4b0be; text-transform: none; letter-spacing: 0; }
+
+/* ── 상단 HUD ── */
+.hud-top {
+  position: absolute; top: var(--edge); left: var(--edge); right: var(--edge);
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;
+  pointer-events: none; z-index: 12;
+}
+.title-box {
+  pointer-events: auto;
+  background: var(--panel-bg); border: 3px solid var(--panel-border);
+  box-shadow: 4px 4px 0 #1e272e; border-radius: 12px;
+  padding: 8px 16px; display: inline-flex; flex-direction: column; gap: 1px;
+}
+.title-box h1 { font-size: 1.2rem; font-weight: 700; color: #1e272e; letter-spacing: -0.5px; display: flex; align-items: center; gap: 8px; }
+.title-box h1 span { font-size: 0.78rem; color: var(--text-muted); font-weight: 600; }
+.title-box > span { font-size: 0.76rem; color: var(--text-muted); font-family: 'IBM Plex Sans KR', sans-serif; font-weight: 600; }
+.hud-right { display:flex; gap:8px; align-items:center; pointer-events:auto; flex-wrap: wrap; justify-content: flex-end; }
+
+.status-badge {
+  background: #2ed573; color: #ffffff; border: 3px solid #1e272e;
+  box-shadow: 4px 4px 0 #1e272e; border-radius: 12px;
+  padding: 8px 16px; font-size: 0.95rem; font-weight: 700; text-align: center;
+  transition: all 0.2s ease;
+}
+.status-badge.elastic { background: #2ed573; }
+.status-badge.plastic { background: #ffa502; color: #1e272e; }
+.status-badge.danger { background: #ff4757; color: #ffffff; animation: pulse 0.8s infinite; }
+.status-badge.broken { background: #2f3542; color: #ff4757; }
+.status-badge.residual { background: #ffeaa7; color: #1e272e; }
+@keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+
+/* 점수 배지 */
+.score-badge {
+  background: #f1c40f; color: #2c3e50; border: 2.5px solid #1e272e;
+  box-shadow: 3px 3px 0 #1e272e; border-radius: 12px;
+  padding: 7px 12px; font-family: var(--font-arcade); font-size: 0.92rem; font-weight: 700;
+  display: flex; align-items: center; gap: 6px; white-space: nowrap;
+}
+.score-badge.bump { animation: scoreBump 0.5s ease; }
+@keyframes scoreBump { 0% { transform: scale(1); } 40% { transform: scale(1.18); background:#fff176; } 100% { transform: scale(1); } }
+
+.top-util-btn {
+  background: var(--panel-bg); border: 2.5px solid var(--panel-border);
+  box-shadow: 3px 3px 0 #1e272e; border-radius: 12px;
+  padding: 8px 14px; font-family: var(--font-arcade); font-size: 0.9rem; font-weight: 700;
+  color: #2f3542; cursor: pointer; transition: all 0.15s;
+}
+.top-util-btn:hover { background: #f1f2f6; transform: translateY(-1px); }
+.top-util-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #1e272e; }
+
+/* ── 왼쪽: 실험 미션 열 (세로로 길게) ── */
+.mission-panel {
+  position: absolute; top: var(--hud-top-bottom, 84px); left: var(--edge); width: var(--col-l);
+  bottom: var(--bottom-h, 120px); z-index: 9; min-height: 0;
+  padding: 10px 11px; display: flex; flex-direction: column; gap: 8px;
+  font-family: 'IBM Plex Sans KR', sans-serif;
+}
+.mission-head { display:flex; width:100%; gap:8px; justify-content:space-between; align-items:center; cursor:pointer; font-family: var(--font-arcade); font-weight:700; font-size:0.95rem; background:none; border:none; padding:0; color:#2f3542; text-align:left; }
+.mission-head:focus-visible { outline: 3px solid #ff4757; outline-offset: 3px; border-radius: 6px; }
+.mission-head .chev { display:inline-block; font-size:0.8rem; color:#747d8c; transition: transform 0.15s; margin-left: 2px; }
+.mission-panel.collapsed .mission-head .chev { transform: rotate(-90deg); }
+.mission-head .cnt { background:#f1c40f; border:2px solid #1e272e; border-radius:8px; padding:1px 8px; font-size:0.78rem; }
+.mission-score { display:flex; align-items:center; justify-content:space-between; background:#fff8dc; border:2px solid #1e272e; border-radius:10px; padding:5px 10px; box-shadow: 2px 2px 0 #1e272e; }
+.mission-score small { font-size: 0.72rem; color:#8a6d00; font-weight:700; }
+.mission-score b { font-family: var(--font-arcade); font-size: 1.3rem; color:#d35400; line-height: 1; }
+.mission-score b span { font-size: 0.8rem; color:#8a6d00; margin-left: 2px; }
+.mission-progress { height: 9px; background:#e2e8f0; border-radius:5px; overflow:hidden; border:1.5px solid #ced6e0; flex-shrink:0; }
+.mission-progress i { display:block; height:100%; width:0; background: linear-gradient(90deg,#2ed573,#7bed9f); transition: width 0.35s ease; }
+.mission-list { list-style:none; display:flex; flex-direction:column; gap:5px; overflow-y:auto; min-height:0; flex:1; padding-right:2px; }
+.mission-list::-webkit-scrollbar { width: 5px; }
+.mission-list::-webkit-scrollbar-thumb { background: #ced6e0; border-radius: 4px; }
+.mission-list li { font-size:0.74rem; line-height:1.35; color:#2f3542; display:flex; gap:6px; align-items:flex-start; background:#f8f9fa; border:1.5px solid #e1e5ea; border-radius:8px; padding:5px 7px; }
+.mission-list li .ck { flex-shrink:0; width:16px; height:16px; border:2px solid #a4b0be; border-radius:4px; font-size:0.7rem; line-height:12px; text-align:center; color:#fff; margin-top:1px; background:#fff; }
+.mission-list li .tx { flex:1; min-width:0; }
+.mission-list li .pt { flex-shrink:0; font-family: var(--font-mono); font-size:0.7rem; font-weight:700; color:#e67e22; margin-top:1px; }
+.mission-list li.done { color:#8a9aa8; background:#eefbf2; border-color:#b8e8c6; }
+.mission-list li.done .tx { text-decoration: line-through; }
+.mission-list li.done .pt { color:#27ae60; }
+.mission-list li.done .ck { background:#2ed573; border-color:#1e272e; }
+.mission-list li.done .ck::after { content:'✓'; }
+.mission-list li.just { animation: missionPop 0.6s ease; }
+@keyframes missionPop { 0% { transform: scale(1); } 40% { transform: scale(1.04); background:#d8f8e3; } 100% { transform: scale(1); } }
+.mission-note { font-size:0.72rem; line-height:1.4; color:#1e6b3a; background:#e3f9e9; border-radius:6px; padding:6px 8px; flex-shrink:0; }
+.mission-panel.collapsed .mission-list, .mission-panel.collapsed .mission-note, .mission-panel.collapsed .mission-progress { display:none !important; }
+.mission-panel.flash { animation: missionFlash 0.9s ease; }
+@keyframes missionFlash { 0% { box-shadow: 0 0 0 0 rgba(46,213,115,0.9), 4px 4px 0 #1e272e; } 100% { box-shadow: 0 0 0 14px rgba(46,213,115,0), 4px 4px 0 #1e272e; } }
+
+/* ── 오른쪽: σ-ε 선도 · BMD · 대사 · 역학 상태 · 하중 목록 · 종료 버튼 ── */
+.side-panel {
+  position: absolute; top: var(--hud-top-bottom, 84px); right: var(--edge); width: var(--col-r); bottom: var(--edge);
+  z-index: 10; display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+  backdrop-filter: blur(4px);
+}
+.panel-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 12px 10px; display: flex; flex-direction: column; gap: 10px; }
+.panel-scroll > * { flex-shrink: 0; }
+.panel-scroll::-webkit-scrollbar { width: 6px; }
+.panel-scroll::-webkit-scrollbar-thumb { background: #ced6e0; border-radius: 4px; }
+.panel-foot { flex-shrink: 0; padding: 8px 12px 12px; border-top: 2px solid #e1e5ea; background: rgba(255,255,255,0.75); display:flex; flex-direction:column; gap:7px; }
+.end-btn { width: 100%; background: #2f3542; color: #fff; font-size: 1rem; padding: 10px 12px; }
+.score-mini { display: none; }
+.end-btn:hover { background: #1e272e; }
+
+.panel-card { background: #fff; border: 2px solid #2f3542; border-radius: 10px; padding: 7px 9px 8px; display:flex; flex-direction:column; gap:4px; }
+.panel-card .section-title { margin-bottom: 0; }
+.chart-card { cursor: pointer; transition: transform 0.12s, box-shadow 0.12s; }
+.chart-card:hover { transform: translateY(-1px); box-shadow: 3px 3px 0 #1e272e; }
+.chart-card:focus-visible { outline: 3px solid #ff4757; outline-offset: 2px; }
+.learn-chip { margin-left:auto; background:#0984e3; color:#fff; border-radius:8px; padding:1px 7px; font-size:0.66rem; font-weight:700; white-space:nowrap; }
+.chart-container {
+  background: #ffffff; border: 2px solid #dfe4ea; border-radius: 8px;
+  position: relative; width: 100%; height: var(--chart-h); overflow: hidden;
+}
+.chart-container.bmd { height: var(--bmd-h); }
+#curveCanvas, #bmdCanvas { width: 100%; height: 100%; display: block; }
+.formula-strip { font-family: var(--font-mono); font-size: 0.74rem; color:#2f3542; background:#f1f2f6; border-radius:6px; padding:4px 8px; display:flex; justify-content:space-between; gap:8px; white-space:nowrap; overflow:hidden; }
+.formula-strip b { color:#d63031; }
+
+/* 실시간 대사 (말풍선) */
+.speech { display:flex; gap:8px; align-items:flex-start; }
+.speech .avatar { font-size:1.6rem; line-height:1; flex-shrink:0; filter: drop-shadow(1px 2px 0 rgba(0,0,0,0.15)); margin-top:4px; }
+.speech p { flex:1; min-width:0; background:#2f3542; color:#fff; border-radius:12px; border-top-left-radius:3px; padding:8px 11px; font-family:'IBM Plex Sans KR', sans-serif; font-size:0.78rem; line-height:1.5; margin:0; transition: background 0.25s; }
+.speech p.warn { background:#e67e22; }
+.speech p.danger { background:#c0392b; }
+.speech p.good { background:#1e8449; }
+.speech p.info { background:#1f6fb2; }
+
+/* 수치 표 */
+.readout-table {
+  width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 0.76rem;
+  background: #f8f9fa; border: 2px solid #dcdde1; border-radius: 8px; overflow: hidden;
+}
+.readout-table td { padding: 4px 9px; border-bottom: 1px solid #dcdde1; }
+.readout-table tr:last-child td { border-bottom: none; }
+.readout-table td.label { color: #747d8c; font-family: 'IBM Plex Sans KR', sans-serif; font-weight: 600; }
+.readout-table td.val { text-align: right; font-weight: 600; color: #2f3542; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.readout-table tr.highlight td { background: #ffeaa7; color: #d63031; font-weight: 700; }
+
+/* 응력 게이지 바 */
+.stress-bar-wrap {
+  position: relative; width: 100%; height: 22px; background: #e2e8f0;
+  border: 2px solid #2f3542; border-radius: 6px; overflow: hidden; display: flex; align-items: center;
+}
+.stress-bar-fill { height: 100%; width: 0%; background: #2ed573; transition: width 0.15s ease, background-color 0.2s ease; }
+.stress-bar-text { position: absolute; width: 100%; text-align: center; font-family: var(--font-arcade); font-size: 0.72rem; font-weight: 700; color: #1e272e; pointer-events: none; }
+
+.crit-note { font-family:'IBM Plex Sans KR', sans-serif; font-size:0.74rem; line-height:1.4; color:#c0392b; background:#ffeaea; border:2px solid #f5b7b1; border-radius:8px; padding:6px 8px; }
+.lin-warn { font-family:'IBM Plex Sans KR', sans-serif; font-size:0.72rem; line-height:1.4; color:#8a5a00; background:#fff3cd; border:2px solid #f6dd9c; border-radius:8px; padding:5px 8px; }
+
+/* 하중 목록 */
+.load-list { display:flex; flex-direction:column; gap:4px; font-family: var(--font-mono); font-size:0.74rem; }
+.load-empty { color:#a4b0be; font-family:'IBM Plex Sans KR', sans-serif; font-size:0.76rem; padding:3px 2px; }
+.load-row { display:flex; align-items:center; gap:6px; background:#f8f9fa; border:1.5px solid #dcdde1; border-radius:6px; padding:3px 6px; }
+.load-row .ic { font-size:1rem; }
+.load-row .nm { flex:1; color:#2f3542; font-weight:600; }
+.load-row .mx { color:#d63031; font-weight:700; }
+.load-row small { color:#a4b0be; font-size:0.66rem; }
+.load-row.partial { border-style: dashed; border-color:#ff6b81; }
+.load-row button { border:none; background:#dfe4ea; border-radius:4px; width:20px; height:20px; cursor:pointer; font-weight:700; color:#57606f; line-height:1; }
+.load-row button:hover { background:#ff6b81; color:#fff; }
+.load-head { display:flex; justify-content:space-between; padding:0 6px; font-family:'IBM Plex Sans KR', sans-serif; font-size:0.68rem; color:#a4b0be; font-weight:700; }
+.load-sum { display:flex; justify-content:space-between; padding:4px 6px 0; border-top:2px solid #2f3542; margin-top:2px; font-weight:700; color:#2f3542; }
+
+/* ── 하단: 하중물 도크 + 부재 설정 ── */
+.bottom-bar {
+  position: absolute; bottom: var(--edge); left: var(--edge); right: calc(var(--col-r) + var(--edge) + 12px);
+  display: flex; gap: 12px; align-items: stretch; z-index: 10;
+}
+.dock-bar {
+  flex: 0 0 auto; max-width: 100%; overflow-x: auto;
+  background: var(--panel-bg); border: 3px solid var(--panel-border);
+  box-shadow: 4px 4px 0 #1e272e; border-radius: 16px;
+  padding: 8px 12px; display: flex; align-items: center; gap: 8px;
+}
+.dock-bar::-webkit-scrollbar { height: 4px; }
+.dock-bar::-webkit-scrollbar-thumb { background: #ced6e0; border-radius: 4px; }
+.dock-hint { font-size: 0.84rem; font-weight: 700; color: #2f3542; display: flex; flex-direction: column; flex-shrink: 0; white-space: nowrap; margin-right: 4px; }
+.dock-hint small { font-size: 0.7rem; color: #747d8c; font-family: 'IBM Plex Sans KR', sans-serif; font-weight: 600; }
+.spawner-card {
+  background: #ffffff; border: 2.5px solid #2f3542; border-radius: 12px;
+  padding: 6px 10px; display: flex; flex-direction: column; align-items: center; gap: 1px; cursor: grab;
+  box-shadow: 3px 3px 0 #ced6e0; transition: all 0.15s; min-width: 82px;
+  flex-shrink: 0; white-space: nowrap;
+  font-family: var(--font-arcade); color: #2f3542; text-align: center; touch-action: pan-x;
+}
+.spawner-card:focus-visible { outline: 3px solid #ff4757; outline-offset: 2px; }
+.spawner-card:hover { transform: translateY(-3px) scale(1.05); box-shadow: 4px 6px 0 #1e272e; border-color: #ff4757; }
+.spawner-card:active { cursor: grabbing; transform: translateY(0); }
+.spawner-icon { font-size: 1.7rem; line-height: 1.1; filter: drop-shadow(2px 2px 0 rgba(0,0,0,0.15)); }
+.spawner-info { display: flex; flex-direction: column; align-items: center; }
+.spawner-name { font-size: 0.8rem; font-weight: 700; }
+.spawner-weight { font-size: 0.7rem; color: #ff4757; font-family: var(--font-mono); font-weight: 600; }
+
+.setup-bar {
+  flex: 1 1 0; min-width: 0; max-width: 560px; overflow: hidden;
+  background: var(--panel-bg); border: 3px solid var(--panel-border);
+  box-shadow: 4px 4px 0 #1e272e; border-radius: 16px;
+  padding: 7px 12px 8px; display: flex; flex-direction: column; gap: 5px; justify-content: center;
+}
+.setup-bar .section-title { font-size: 0.74rem; margin-bottom: 0; }
+.setup-row { display: flex; gap: 6px; align-items: stretch; }
+.setup-row .slider-box { flex: 1 1 auto; min-width: 0; }
+.setup-row .seg-control { flex: 0 0 auto; }
+.mat-grid { display: flex; flex-wrap: wrap; gap: 4px; }
+.mat-btn {
+  flex: 1 1 0; background: #f1f2f6; border: 2.5px solid #a4b0be; border-radius: 8px;
+  padding: 5px 4px; font-family: 'IBM Plex Sans KR', sans-serif; font-size: 0.74rem; font-weight: 700; white-space: nowrap;
+  color: #2f3542; cursor: pointer; transition: all 0.15s; text-align: center;
+}
+.mat-btn:hover { background: #dfe4ea; transform: translateY(-1px); }
+.mat-btn.active { background: #ff4757; color: #ffffff; border-color: #1e272e; box-shadow: 2px 2px 0 #1e272e; transform: translateY(-1px); }
+.slider-box { display:flex; align-items:center; gap:8px; background:#f8f9fa; border:2px solid #dcdde1; border-radius:8px; padding:4px 10px; }
+.slider-box .lbl { font-family:'IBM Plex Sans KR', sans-serif; font-size:0.72rem; font-weight:700; color:#57606f; white-space:nowrap; }
+.slider-box .lbl small { color:#a4b0be; font-weight:600; }
+.slider-box input { flex:1; min-width: 60px; cursor:pointer; accent-color: #ff4757; }
+.slider-box span.v { font-family:var(--font-mono); font-size:0.8rem; font-weight:700; color:#2f3542; min-width:44px; text-align:right; }
+.btn-row { display: flex; gap: 6px; }
+.arcade-btn {
+  flex: 1; background: #70a1ff; color: #ffffff; border: 2.5px solid #1e272e;
+  box-shadow: 3px 3px 0 #1e272e; border-radius: 10px; padding: 8px 8px;
+  font-family: var(--font-arcade); font-size: 0.86rem; font-weight: 700; white-space: nowrap;
+  cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; display: flex; align-items: center; justify-content: center; gap: 4px;
+}
+.arcade-btn:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 #1e272e; }
+.arcade-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #1e272e; }
+.arcade-btn.danger { background: #ff6b81; }
+.arcade-btn.success { background: #2ed573; }
+.seg-control { display:flex; gap:3px; background:#f1f2f6; border:2px solid #dcdde1; border-radius:8px; padding:2px; align-items:center; }
+.seg-control .lbl { font-family:'IBM Plex Sans KR', sans-serif; font-size:0.66rem; font-weight:700; color:#a4b0be; padding: 0 4px; white-space:nowrap; }
+.seg-control button { flex:1; border:none; background:transparent; border-radius:6px; padding:3px 6px; font-family: var(--font-mono); font-size:0.72rem; font-weight:700; color:#57606f; cursor:pointer; white-space:nowrap; }
+.seg-control button.active { background:#2f3542; color:#ffffff; }
+
+/* 토스트 메시지 */
+.toast-box {
+  position: fixed; bottom: calc(var(--bottom-h, 120px) + 4px); left: var(--scene-cx, 50%); transform: translateX(-50%) translateY(20px);
+  background: #2f3542; color: #ffffff; border: 3px solid #1e272e; box-shadow: 4px 4px 0 #1e272e;
+  border-radius: 14px; padding: 10px 22px; font-size: 0.9rem; font-weight: 700;
+  pointer-events: none; opacity: 0; transition: opacity 0.22s cubic-bezier(0.175, 0.885, 0.32, 1.275), transform 0.22s cubic-bezier(0.175, 0.885, 0.32, 1.275);   /* z-index 는 전환하지 않음 */
+  z-index: 900; text-align: center; max-width: min(85%, 640px); font-family: 'IBM Plex Sans KR', sans-serif;   /* 모달(1000) 아래 */
+}
+/* 모달이 열려 있을 때의 토스트: 모달 위, 화면 위쪽에 (모달 버튼을 가리지 않게) */
+.toast-box.over-modal { z-index: 1100; bottom: auto; top: 18px; left: 50%; transform: translateX(-50%) translateY(0);
+}
+.toast-box.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast-box.warning { background: #e67e22; }
+.toast-box.danger { background: #e74c3c; }
+.toast-box.success { background: #27ae60; }
+
+/* 첫 사용 안내 말풍선 */
+.first-hint {
+  position:absolute; bottom: var(--bottom-h, 120px); left: var(--scene-cx, 50%); transform: translateX(-50%);
+  z-index: 11; background:#2f3542; color:#fff; border-radius: 12px; padding: 8px 34px 8px 14px;
+  font-family:'IBM Plex Sans KR', sans-serif; font-size:0.86rem; box-shadow: 3px 3px 0 #1e272e;
+  white-space: nowrap; animation: hintBob 1.4s ease-in-out infinite;
+}
+.first-hint span { color:#ced6e0; font-size:0.76rem; }
+.first-hint::after { content:''; position:absolute; bottom:-8px; left:50%; transform:translateX(-50%); border-left:8px solid transparent; border-right:8px solid transparent; border-top:8px solid #2f3542; }
+.first-hint button { position:absolute; right:6px; top:50%; transform:translateY(-50%); background:none; border:none; color:#ced6e0; font-size:1rem; cursor:pointer; }
+.first-hint.hidden { display:none; }
+@keyframes hintBob { 0%,100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(-5px); } }
+
+/* 3D 화면 좌상단 배지들 */
+.scale-badge {
+  position:absolute; top: var(--scene-top, 90px); left: var(--scene-left, 300px); z-index:9; cursor:pointer; border:none;
+  background: rgba(47,53,66,0.85); color:#fff; border-radius:8px; padding:5px 10px;
+  font-family: var(--font-mono); font-size:0.74rem; font-weight:600;
+}
+.cam-hint {
+  position: absolute; top: calc(var(--scene-top, 90px) + 32px); left: var(--scene-left, 300px); z-index: 9;
+  background: rgba(0,0,0,0.6); color: #ffffff; padding: 6px 12px; border-radius: 20px;
+  font-size: 0.72rem; font-family: 'IBM Plex Sans KR', sans-serif; pointer-events: none;
+}
+
+/* 드래그 고스트 */
+#dragGhost {
+  position: fixed; pointer-events: none; z-index: 1000; display: none;
+  font-size: 2.4rem; transform: translate(-50%, -50%);
+  filter: drop-shadow(0 10px 10px rgba(0,0,0,0.3));
+}
+#dragGhost.moving { transform: translate(-50%, calc(-100% - 30px)); }
+#dragGhost.moving .ic { display:none; }
+#dragGhost .cap { display:block; margin-top:2px; font-size:0.72rem; font-family: var(--font-mono); font-weight:700; background:#2f3542; color:#fff; padding:3px 8px; border-radius:6px; white-space:nowrap; text-align:center; }
+#dragGhost .cap.off { background:#a4b0be; }
+#dragGhost .ic { display:block; text-align:center; }
+
+/* 모달 */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000;
+  display: none; align-items: center; justify-content: center; backdrop-filter: blur(3px);
+}
+.modal-overlay.open { display: flex; }
+.modal-content {
+  background: #ffffff; border: 3.5px solid #1e272e; box-shadow: 6px 6px 0 #1e272e;
+  border-radius: 20px; width: 92%; max-width: 560px; max-height: 88vh;
+  display: flex; flex-direction: column; overflow: hidden; animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.modal-content.wide { max-width: 760px; }
+@keyframes popIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.modal-header { padding: 14px 20px; background: #ffeaa7; border-bottom: 2.5px solid #1e272e; display: flex; justify-content: space-between; align-items: center; }
+.modal-header.blue { background: #d6eaff; }
+.modal-header.dark { background: #2f3542; color: #fff; }
+.modal-header.dark h2, .modal-header.dark .modal-close { color: #fff; }
+.modal-header h2 { font-size: 1.15rem; font-weight: 700; color: #1e272e; }
+.modal-close { background: none; border: none; font-size: 1.6rem; line-height: 1; font-weight: 700; cursor: pointer; color: #1e272e; }
+.modal-body { padding: 18px 20px; overflow-y: auto; font-family: 'IBM Plex Sans KR', sans-serif; font-size: 0.88rem; line-height: 1.6; color: #2f3542; display: flex; flex-direction: column; gap: 14px; }
+.modal-body h3 { font-size: 0.95rem; font-weight: 700; color: #0984e3; margin-bottom: 2px; }
+.modal-body p { margin: 0; }
+.modal-body .eq { font-family: var(--font-mono); background:#f1f2f6; border-left: 4px solid #0984e3; border-radius: 6px; padding: 8px 12px; font-size: 0.86rem; line-height: 1.7; }
+.modal-body .eq b { color:#d63031; }
+.concept-grid { display:grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+.concept-grid svg { width: 100%; height: auto; display:block; }
+.live-box { background:#fff8dc; border:2px solid #f1c40f; border-radius:10px; padding:10px 12px; font-family: var(--font-mono); font-size:0.82rem; line-height:1.7; }
+.live-box b { color:#d63031; }
+.modal-foot { padding: 10px 20px 16px; display:flex; gap:8px; justify-content:flex-end; border-top: 2px solid #e1e5ea; }
+.modal-foot .arcade-btn { flex: 0 0 auto; padding: 8px 16px; }
+
+/* 종료·랭킹 모달 */
+.final-score { text-align:center; padding: 6px 0 2px; }
+.final-score .num { font-family: var(--font-arcade); font-size: 3rem; font-weight: 700; color:#d35400; line-height:1; }
+.final-score .num span { font-size: 1.2rem; color:#8a6d00; margin-left: 4px; }
+.final-score .sub { color:#747d8c; font-size:0.82rem; margin-top:6px; }
+.final-grade { display:inline-block; margin-top:8px; background:#2f3542; color:#fff; border-radius:10px; padding:4px 12px; font-weight:700; font-size:0.9rem; }
+.rank-form { display:flex; gap:8px; align-items:center; }
+.rank-form input { flex:1; border:2.5px solid #2f3542; border-radius:10px; padding:9px 12px; font-family:'IBM Plex Sans KR', sans-serif; font-size:0.9rem; user-select:text; -webkit-user-select:text; }
+.rank-form input:focus { outline: 3px solid #ffeaa7; }
+.rank-table { width:100%; border-collapse:collapse; font-family: var(--font-mono); font-size:0.8rem; border:2px solid #2f3542; border-radius:8px; overflow:hidden; }
+.rank-table th { background:#2f3542; color:#fff; font-family:'IBM Plex Sans KR', sans-serif; font-size:0.74rem; padding:6px 8px; text-align:left; }
+.rank-table td { padding:6px 8px; border-bottom:1px solid #e1e5ea; }
+.rank-table tr:last-child td { border-bottom:none; }
+.rank-table tr.me td { background:#fff8dc; font-weight:700; color:#d35400; }
+.rank-table td.r { text-align:right; }
+.rank-table td.medal { width: 34px; text-align:center; }
+.rank-empty { color:#a4b0be; font-size:0.82rem; text-align:center; padding: 10px; }
+.done-list { display:flex; flex-wrap:wrap; gap:4px; }
+.done-list span { font-size:0.7rem; background:#eefbf2; border:1.5px solid #b8e8c6; border-radius:6px; padding:2px 6px; color:#1e6b3a; }
+.done-list span.no { background:#f8f9fa; border-color:#e1e5ea; color:#a4b0be; }
+
+/* ── 번외(plus): 핵심 수치 타일 · 다음 미션 강조 · 점수 팝업 · 재료 색 점 ── */
+.stat-row { display:grid; grid-template-columns: repeat(3, 1fr); gap:6px; }
+.stat-tile { background:#fff; border:2px solid #2f3542; border-radius:10px; padding:5px 8px; display:flex; flex-direction:column; min-width:0; }
+.stat-tile small { font-family:'IBM Plex Sans KR', sans-serif; font-size:0.64rem; font-weight:700; color:#747d8c; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.stat-tile b { font-family: var(--font-mono); font-size:0.98rem; color:#2f3542; white-space:nowrap; line-height:1.2; }
+.stat-tile b span { font-size:0.68rem; color:#a4b0be; margin-left:2px; }
+.stat-tile.ok b { color:#1e8449; } .stat-tile.warn b { color:#d35400; } .stat-tile.danger b { color:#c0392b; }
+.stat-tile .bar { height:5px; background:#e2e8f0; border-radius:3px; overflow:hidden; margin-top:3px; }
+.stat-tile .bar i { display:block; height:100%; width:0; background:#2ed573; transition: width 0.15s; }
+.stat-tile.warn .bar i { background:#ffa502; } .stat-tile.danger .bar i { background:#ff4757; }
+.mission-list li.next { border-color:#f1c40f; background:#fffbe6; box-shadow: 0 0 0 2px rgba(241,196,15,0.25); }
+.mission-list li.next .ck { border-color:#f1c40f; }
+.mission-list li .nx { flex-shrink:0; font-size:0.6rem; font-weight:700; color:#fff; background:#f39c12; border-radius:5px; padding:1px 5px; margin-top:2px; }
+.mission-list li { cursor: help; }
+.score-pop { position:fixed; z-index:1150; font-family: var(--font-arcade); font-weight:700; font-size:1.2rem; color:#d35400; text-shadow: 1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff; pointer-events:none; animation: scorePop 1.1s ease-out forwards; }
+@keyframes scorePop { 0% { transform: translate(-50%, 0) scale(0.8); opacity:0; } 15% { opacity:1; transform: translate(-50%, -6px) scale(1.15); } 100% { transform: translate(-50%, -46px) scale(1); opacity:0; } }
+.mat-btn .sw { display:inline-block; width:9px; height:9px; border-radius:50%; border:1.5px solid rgba(0,0,0,0.35); margin-right:4px; vertical-align:-1px; }
+.mat-btn.active .sw { border-color:#fff; }
+@media (min-width: 821px) { .dock-bar { overflow: visible; } }   /* 데스크톱은 스크롤이 없으니 카드 hover 가 잘리지 않게 */
+.key-hint { opacity:0.8; }
+@media (max-width: 820px) { .stat-tile b { font-size:0.84rem; } .stat-tile small { font-size:0.58rem; } .mission-list li .nx { display:none; } }
+
+/* 높이가 낮은 화면: 그래프를 조금 낮게 */
+@media (max-height: 860px) and (min-width: 821px) {
+  :root { --chart-h: 180px; --bmd-h: 120px; }
+}
+@media (max-height: 740px) and (min-width: 821px) {
+  :root { --chart-h: 150px; --bmd-h: 100px; }
+  .readout-table td { padding: 2px 9px; }
+}
+/* 폭이 넉넉하지 않은 데스크톱: 열 너비를 줄이고 도크 카드를 작게 (도크 5개가 스크롤 없이 다 보이게) */
+@media (max-width: 1540px) and (min-width: 821px) {
+  :root { --col-l: 236px; --col-r: 364px; }
+  .dock-hint { display:none; }
+  .spawner-card { min-width: 64px; padding: 5px 6px; }
+  .spawner-name { font-size: 0.72rem; }
+  .spawner-icon { font-size: 1.5rem; }
+  .mat-btn { font-size: 0.7rem; padding: 5px 2px; }
+  .setup-bar { padding: 6px 10px 7px; }
+}
+@media (max-width: 1120px) and (min-width: 821px) {
+  :root { --col-l: 204px; --col-r: 336px; }
+  .title-box > span { display:none; }
+  .spawner-name { display:none; }
+  .spawner-card { min-width: 56px; }
+}
+
+/* ── 좁은 화면 (태블릿/휴대폰): 위쪽 3D, 아래쪽 패널(스크롤), 맨 아래 도크·부재 ── */
+@media (max-width: 820px) {
+  :root { --edge: 8px; --chart-h: 110px; --bmd-h: 110px; }
+  .hud-top { flex-wrap: wrap; gap: 6px; }
+  .hud-right { gap: 6px !important; }
+  .title-box { padding: 6px 10px; box-shadow: 3px 3px 0 #1e272e; }
+  .title-box h1 { font-size: 1rem; }
+  .title-box h1 span, .title-box > span { display:none; }
+  .score-badge, .top-util-btn { padding: 5px 8px; font-size: 0.78rem; box-shadow: 2px 2px 0 #1e272e; }
+  .status-badge { padding: 5px 10px; font-size: 0.78rem; box-shadow: 2px 2px 0 #1e272e; white-space: nowrap; }
+  .side-panel { top: auto; bottom: var(--bottom-h, 130px); right: 8px; left: 8px; width: auto; max-height: 33vh; box-shadow: 3px 3px 0 #1e272e; }
+  .panel-scroll { padding: 8px; gap: 7px; }
+  .chart-pair { display:grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .panel-card { padding: 4px 6px 5px; gap: 2px; }
+  .panel-card .section-title { font-size: 0.66rem; }
+  .panel-card .section-title .hint-inline { display:none; }
+  .formula-strip { font-size: 0.64rem; }
+  .speech .avatar { font-size: 1.3rem; }
+  .speech p { font-size: 0.72rem; padding: 6px 9px; }
+  .readout-card .section-title { display:none; }
+  .readout-table { display:block; border-width: 1px; }
+  .readout-table tbody { display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .readout-table tr { display:flex; flex-direction:column; padding: 1px 5px; }
+  .readout-table td { border: none; padding: 0; text-align: left; font-size: 0.58rem; overflow: hidden; text-overflow: ellipsis; }
+  .readout-table td.val { font-size: 0.68rem; }
+  .readout-table tr.narrow-hide { display:none; }
+  .panel-foot { padding: 5px 8px 7px; }
+  .end-btn { font-size: 0.84rem; padding: 7px 10px; }
+  .bottom-bar { bottom: 8px; left: 8px; right: 8px; flex-direction: column; gap: 6px; }
+  .dock-bar { padding: 5px 8px; gap: 6px; box-shadow: 3px 3px 0 #1e272e; border-radius: 12px; }
+  .dock-hint { display:none; }
+  .spawner-card { flex-direction: row; padding: 4px 8px; gap: 6px; min-width: 0; }
+  .spawner-icon { font-size: 1.3rem; }
+  .spawner-info { align-items: flex-start; }
+  .setup-bar { flex: 0 0 auto; max-width: none; padding: 5px 8px; gap: 5px; box-shadow: 3px 3px 0 #1e272e; border-radius: 12px; }   /* 세로 flex 에서 납작해지지 않게 */
+  .setup-bar .section-title { display:none; }
+  .setup-row { flex-wrap: wrap; }
+  .setup-row .slider-box { padding: 3px 8px; flex: 1 1 210px; }
+  .setup-row .btn-row { flex: 1 1 200px; }
+  .mat-btn { font-size: 0.64rem; padding: 4px 2px; }
+  .arcade-btn { font-size: 0.74rem; padding: 5px 6px; box-shadow: 2px 2px 0 #1e272e; }
+  .setup-row .btn-row { flex: 0 0 auto; }           /* 좁은 화면: 하중 제거·시편 교체 버튼은 JS 가 하단 부재 바로 옮김 */
+  .scale-badge, .cam-hint { display:none; }
+  .mission-panel { top: var(--scene-top, 90px); left: 8px; width: auto; max-width: 250px; bottom: auto; max-height: 36vh; padding: 5px 8px; box-shadow: 3px 3px 0 #1e272e; }
+  .mission-head { font-size: 0.8rem; }
+  .mission-panel.collapsed .mission-score { display:none; }
+  .mission-panel.collapsed .score-mini { display:inline-block; }
+  .mission-score { padding: 3px 8px; }
+  .mission-score b { font-size: 1.05rem; }
+  .mission-list li { font-size: 0.68rem; padding: 3px 5px; }
+  .first-hint { left: 50%; bottom: calc(33vh + var(--bottom-h, 130px) + 6px); font-size: 0.8rem; white-space: normal; width: max-content; max-width: calc(100vw - 24px); }
+  .toast-box { bottom: calc(33vh + var(--bottom-h, 130px) + 6px); left: 50%; font-size: 0.8rem; padding: 8px 14px; max-width: calc(100vw - 24px); }
+  .modal-content { width: 96%; max-height: 92vh; }
+  .concept-grid { grid-template-columns: 1fr; }
+}
+/* 세로로 긴 태블릿은 그래프를 크게 */
+@media (max-width: 820px) and (min-height: 1000px) {
+  :root { --chart-h: 170px; --bmd-h: 150px; }
+  .side-panel { max-height: 38vh; }
+  .first-hint, .toast-box { bottom: calc(38vh + var(--bottom-h, 130px) + 6px); }
+}
+/* 휴대폰: 도크 카드를 아이콘+무게만 */
+@media (max-width: 480px) {
+  .score-badge { display:none; }
+  .side-panel { max-height: 30vh; }
+  .first-hint, .toast-box { bottom: calc(30vh + var(--bottom-h, 130px) + 6px); }
+  .spawner-card { flex-direction: column; gap: 0; padding: 3px 5px; min-width: 56px; }
+  .spawner-name { display: none; }
+  .spawner-weight { font-size: 0.66rem; }
+  .first-hint span { display:none; }
+  .setup-row .slider-box { flex: 1 1 100%; }
+  .seg-control .lbl { display:none; }
+}
+</style>
+</head>
+<body>
+
+<canvas id="canvas3d"></canvas>
+
+<!-- 토스트 알림 (alert 대체) -->
+<div id="toast" class="toast-box"></div>
+
+<!-- HUD 상단 -->
+<div class="hud-top">
+  <div class="title-box">
+    <h1>버텨라 캔틸레버 <span>Voxel Cantilever Lab</span></h1>
+    <span>낭떠러지에 고정된 캔틸레버 다리에 하중물을 올려 변형과 파괴를 테스트하세요!</span>
+  </div>
+  <div class="hud-right">
+    <div class="score-badge" id="scoreBadge" title="미션을 완료하면 점수를 얻습니다">🏆 0 점</div>
+    <button class="top-util-btn" id="btnView" title="단면뷰 ↔ 아이소뷰 전환 (화면 빈 곳을 끌어도 돌아갑니다)">🧊 아이소뷰</button>
+    <button class="top-util-btn" id="btnHelp" title="역학 개념 가이드">💡 가이드</button>
+    <button class="top-util-btn" id="btnSound" title="소리 켜기/끄기">🔊</button>
+    <div class="status-badge elastic" id="statusBadge">안전 (탄성 영역)</div>
+  </div>
+</div>
+
+<!-- 왼쪽: 실험 미션 (점수) -->
+<div class="mission-panel panel" id="missionPanel">
+  <button type="button" class="mission-head" id="missionHead" aria-expanded="true" aria-controls="missionList"><span>🎯 실험 미션 <span class="chev">▾</span></span><span class="cnt score-mini" id="scoreMini">0점</span><span class="cnt" id="missionCnt">0 / 12</span></button>
+  <div class="mission-score"><small>내 점수</small><b><span id="scoreVal">0</span><span>점</span></b></div>
+  <div class="mission-progress"><i id="missionBar"></i></div>
+  <ul class="mission-list" id="missionList"></ul>
+  <div class="mission-note" id="missionNote" style="display:none"></div>
+</div>
+
+<!-- 오른쪽: σ-ε 선도 · 휨모멘트도 · 대사 · 실시간 역학 상태 · 하중 목록 · 종료 -->
+<div class="side-panel panel" id="sidePanel">
+  <div class="panel-scroll" id="panelScroll">
+    <div class="chart-pair">
+      <div class="panel-card chart-card" id="curveCard" role="button" tabindex="0" title="눌러서 응력·단면계수 개념 설명 보기">
+        <div class="section-title">응력-변형률 선도 (σ-ε) <span class="hint-inline">● 고정단 상단</span><span class="learn-chip">🔍 개념 보기</span></div>
+        <div class="chart-container"><canvas id="curveCanvas"></canvas></div>
+        <div class="formula-strip" id="formulaStrip"><span>σ = M / S</span><span>S = b·h²/6 = <b id="valS">2,352 cm³</b></span></div>
+      </div>
+      <div class="panel-card">
+        <div class="section-title">휨모멘트도 (BMD) <span class="hint-inline">M = ΣP·x · 벽에서 최대</span></div>
+        <div class="chart-container bmd"><canvas id="bmdCanvas"></canvas></div>
+      </div>
+    </div>
+
+    <div class="stat-row" id="statRow" title="핵심 수치 (자세한 표는 아래)">
+      <div class="stat-tile" id="tileM"><small>고정단 M</small><b id="tileMv">0.0<span>kN·m</span></b><div class="bar"><i id="tileMb"></i></div></div>
+      <div class="stat-tile" id="tileS"><small>σ / σ_y</small><b id="tileSv">0<span>%</span></b><div class="bar"><i id="tileSb"></i></div></div>
+      <div class="stat-tile" id="tileD"><small>끝단 처짐 δ</small><b id="tileDv">0.0<span>cm</span></b><div class="bar"><i id="tileDb"></i></div></div>
+    </div>
+    <div class="speech" id="commentary"><span class="avatar" id="commentaryAvatar">👷</span><p id="commentaryText">다리가 비어 있어요. 아래 도크에서 하중물을 끌어 다리 위에 올려 보세요!</p></div>
+
+    <div class="crit-note" id="critNote" style="display:none"></div>
+    <div class="lin-warn" id="linWarn" style="display:none">⚠ 처짐이 보 길이의 10%를 넘었습니다. 표의 값은 소변형(선형) 보 이론 계산값이라 실제 큰 변형과는 오차가 큽니다.</div>
+
+    <div class="panel-card readout-card">
+      <div class="section-title">실시간 역학 상태</div>
+      <table class="readout-table">
+        <tr>
+          <td class="label">재하 하중물</td>
+          <td class="val" id="valPeople">0 개 (0 kg)</td>
+        </tr>
+        <tr>
+          <td class="label">고정단 M = ΣP·x</td>
+          <td class="val" id="valMoment">0.0 kN·m</td>
+        </tr>
+        <tr>
+          <td class="label">고정단 σ = M/S</td>
+          <td class="val" id="valStress">0.0 MPa</td>
+        </tr>
+        <tr class="narrow-hide">
+          <td class="label" id="lblYield">재료 항복강도 σ_y</td>
+          <td class="val" id="valYield">275 MPa</td>
+        </tr>
+        <tr>
+          <td class="label">고정단 변형률 ε</td>
+          <td class="val" id="valStrain">0.00000</td>
+        </tr>
+        <tr>
+          <td class="label">끝단 처짐 δ (계산값)</td>
+          <td class="val" id="valDeflection">0.0 cm</td>
+        </tr>
+        <tr id="rowPlastic">
+          <td class="label">소성 영구처짐 δ_p</td>
+          <td class="val" id="valPermanent">0.0 cm</td>
+        </tr>
+      </table>
+    </div>
+
+    <div>
+      <div class="section-title" id="gaugeTitle">응력 게이지 (σ_max / σ_y)</div>
+      <div class="stress-bar-wrap">
+        <div class="stress-bar-fill" id="stressBarFill"></div>
+        <span class="stress-bar-text" id="stressBarText">0% (탄성 안전)</span>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title">하중 목록 (M = Σ P·x)</div>
+      <div class="load-list" id="loadList">
+        <div class="load-empty">아직 올린 하중물이 없습니다.</div>
+      </div>
+    </div>
+    <div class="mat-desc" id="matDesc" style="display:none"></div>
+  </div>
+  <div class="panel-foot" id="panelFoot">
+    <div class="btn-row" id="actionRow">
+      <button class="arcade-btn danger" id="btnUnload" title="보 위 하중을 모두 내립니다">❌ 하중 전부 제거</button>
+      <button class="arcade-btn" id="btnReset" title="새 시편으로 교체합니다">🔄 시편 교체</button>
+    </div>
+    <button type="button" class="arcade-btn end-btn" id="btnEnd">🏁 실험 종료 · 점수 확인</button>
+  </div>
+</div>
+
+<!-- 첫 사용 안내 -->
+<div class="first-hint" id="firstHint" role="status">
+  👇 <b>하중물을 끌어서</b> 다리 위에 놓아 보세요 <span>(클릭하면 끝단에 자동 배치 · 올린 뒤 끌어서 이동)</span>
+  <button type="button" id="firstHintClose" aria-label="안내 닫기">×</button>
+</div>
+
+<!-- 하단: 하중물 도크 + 부재(재료·두께) 설정 -->
+<div class="bottom-bar" id="bottomBar">
+  <div class="dock-bar" id="dockBar">
+    <div class="dock-hint">
+      <span>하중물</span>
+      <small>끌어서 다리 위에</small>
+    </div>
+    <button type="button" class="spawner-card" id="spawnWeight100">
+      <span class="spawner-icon">📦</span>
+      <span class="spawner-info"><span class="spawner-name">시험추</span><span class="spawner-weight">100 kg</span></span>
+    </button>
+    <button type="button" class="spawner-card" id="spawnBlock500">
+      <span class="spawner-icon">🧱</span>
+      <span class="spawner-info"><span class="spawner-name">적재블록</span><span class="spawner-weight">500 kg</span></span>
+    </button>
+    <button type="button" class="spawner-card" id="spawnWorker">
+      <span class="spawner-icon">🧍</span>
+      <span class="spawner-info"><span class="spawner-name">작업자</span><span class="spawner-weight">75 kg</span></span>
+    </button>
+    <button type="button" class="spawner-card" id="spawnCar">
+      <span class="spawner-icon">🚗</span>
+      <span class="spawner-info"><span class="spawner-name">차량하중</span><span class="spawner-weight">1,500 kg</span></span>
+    </button>
+    <button type="button" class="spawner-card" id="spawnHeavy">
+      <span class="spawner-icon">🏗️</span>
+      <span class="spawner-info"><span class="spawner-name">중장비</span><span class="spawner-weight">5,000 kg</span></span>
+    </button>
+  </div>
+  <div class="setup-bar" id="setupBar">
+    <div class="section-title">부재 설정 <span class="hint-inline">재료 · 단면 두께 (I = bh³/12, S = bh²/6)</span></div>
+    <div class="mat-grid" id="matGrid">
+      <button class="mat-btn active" data-mat="mild_steel">🔩 연강</button>
+      <button class="mat-btn" data-mat="high_steel">💎 고장력강</button>
+      <button class="mat-btn" data-mat="concrete">🧱 콘크리트</button>
+      <button class="mat-btn" data-mat="wood">🪵 목재</button>
+      <button class="mat-btn" data-mat="rubber">🟡 고무</button>
+    </div>
+    <div class="setup-row" id="setupRow">
+      <div class="slider-box">
+        <span class="lbl">두께 h <small>(폭 b = 18 cm)</small></span>
+        <input type="range" id="beamHSlider" min="0.15" max="0.45" step="0.01" value="0.28" title="보 단면 두께 h">
+        <span class="v" id="beamHVal">28 cm</span>
+      </div>
+      <div class="seg-control" id="scaleControl" title="화면의 휨 모양만 확대 (표 수치는 실제값)">
+        <span class="lbl">화면 휨</span>
+        <button data-scale="auto" class="active">자동</button>
+        <button data-scale="1">×1</button>
+        <button data-scale="5">×5</button>
+        <button data-scale="20">×20</button>
+        <button data-scale="50">×50</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<button type="button" class="scale-badge" id="scaleBadge" title="눌러서 화면 변형 배율 바꾸기">화면 휨 ×10 확대</button>
+<div class="cam-hint">하중물 끌기 = 이동 · 클릭 = 제거 · 빈 곳 끌기 = 회전 · 휠 = 확대 <span class="key-hint">· 키 1~5 = 하중물 · U 제거 · R 교체 · V 시점</span></div>
+<div id="dragGhost"><span class="ic">🧍</span><span class="cap off">보 위로 가져오세요</span></div>
+
+<!-- 역학 개념 가이드 모달 -->
+<div id="helpModal" class="modal-overlay">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>💡 버텨라 캔틸레버 역학 가이드</h2>
+      <button class="modal-close" id="btnCloseHelp">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div>
+        <h3>🎮 사용법</h3>
+        <p>낭떠러지 끝에 고정된 <strong>캔틸레버 다리</strong> 위에 하중물을 올리는 실험입니다. ① 아래 <strong>부재 설정</strong>에서 재료와 두께를 고르고 → ② 아래 도크의 <strong>하중물</strong>을 끌어서 다리 위 원하는 위치에 놓거나(클릭하면 끝단부터 자동 배치) → ③ 오른쪽의 <strong>σ-ε 선도</strong>·<strong>휨모멘트도</strong>·<strong>실시간 역학 상태</strong>와 안전모 캐릭터의 <strong>대사</strong>를 관찰하고 → ④ <strong>[❌ 하중 제거]</strong>로 원래대로 돌아오는지 확인하세요. 다리 위 하중물은 <strong>끌어서 위치를 옮기거나</strong>, 클릭해서 하나씩 뺄 수 있습니다. 다리가 부러지면 아래 호수로 떨어집니다. 화면은 기본이 <strong>정면(단면)</strong>이고, 빈 곳을 끌거나 오른쪽 위 <strong>[🧊 아이소뷰]</strong> 버튼으로 돌려 볼 수 있습니다. 왼쪽 <strong>실험 미션</strong>을 하나씩 달성하면 점수가 쌓이고, <strong>[🏁 실험 종료]</strong>를 누르면 점수와 랭킹을 볼 수 있습니다.</p>
+      </div>
+      <div>
+        <h3>1. 캔틸레버의 휨모멘트 (M = Σ P·x)</h3>
+        <p>같은 하중이라도 <strong>벽(고정단)에서 멀리 놓을수록</strong> 팔길이 x가 길어져 고정단 모멘트가 커집니다. 드래그할 때 표시되는 <strong>x와 +M</strong> 값, 오른쪽 <strong>하중 목록</strong>의 P·x 합을 비교해 보세요. 올려둔 하중물을 벽 쪽↔끝단으로 끌어 옮기면 M이 실시간으로 변합니다. (하중물끼리는 서로 통과할 수 없어 옆 하중에 닿으면 멈춥니다.) 휨모멘트도(BMD)는 벽에서 가장 크고 끝으로 갈수록 0이 됩니다.</p>
+      </div>
+      <div>
+        <h3>2. 응력과 응력-변형률 선도</h3>
+        <p>고정단 윗면 응력 <strong>σ = M / S</strong> (단면계수 S = bh²/6)가 선도 위의 <strong>점</strong>으로 표시됩니다. 직선 구간(기울기 = 탄성계수 E)에 있는 동안은 <strong>탄성</strong>, 항복강도 σ<sub>y</sub>를 넘으면 <strong>소성</strong>, 극한강도 σ<sub>u</sub>에 도달하면 <strong>파괴</strong>됩니다. 강재는 탄성 구간이 매우 짧아서 선도 앞부분을 확대해 그렸습니다(축 끊김 표시). σ-ε 선도를 누르면 단면계수와 휨응력 개념 페이지가 열립니다.</p>
+      </div>
+      <div>
+        <h3>3. 탄성 vs 소성 — 하중을 빼 보면 안다</h3>
+        <p>• <strong>탄성</strong>: 하중을 빼면 100% 원래대로 돌아옵니다.<br>
+        • <strong>소성</strong>: 항복을 넘었던 부분은 하중을 빼도 <strong>잔류변형률 ε<sub>p</sub></strong>가 남아 보가 처진 채로 남습니다. 선도의 빨간 점선은 기울기 E로 평행하게 내려오는 <strong>하중 제거 경로</strong>이고, 보 윗부분의 <strong>주황색 띠</strong>는 소성이 일어났던 구간입니다.</p>
+      </div>
+      <div>
+        <h3>4. 연성(강재) vs 취성(콘크리트·목재)</h3>
+        <p>• <strong>연강/고장력강</strong>: 항복 후에도 크게 휘며 버티다가 끊어집니다 → 붕괴 전에 경고를 줍니다(연성). 고장력강은 강도는 높지만 늘어날 수 있는 양이 적습니다.<br>
+        • <strong>콘크리트</strong>: 인장강도가 약 3 MPa로 매우 작아, 캔틸레버 윗면(인장)에서 <strong>예고 없이 한 번에</strong> 깨집니다 → 철근을 넣는 이유입니다.<br>
+        • <strong>고무</strong>: 탄성계수가 매우 작아 크게 휘지만 소성이 없어 하중을 빼면 복원됩니다.</p>
+      </div>
+      <div>
+        <h3>5. 두께의 힘 (I = bh³/12)</h3>
+        <p>두께 h를 키우면 처짐을 좌우하는 <strong>I는 h³</strong>, 응력을 좌우하는 <strong>S는 h²</strong>에 비례해 커집니다. 같은 하중을 두고 슬라이더를 움직여 처짐과 응력이 어떻게 줄어드는지 확인해 보세요.</p>
+      </div>
+      <div>
+        <h3>6. 화면 변형 확대</h3>
+        <p>실제 강재 보의 처짐은 몇 cm 정도라 눈에 잘 보이지 않습니다. 그래서 화면의 휨 모양만 <strong>×20 등으로 확대</strong>해 보여주고, 표의 수치는 항상 <strong>실제 값</strong>입니다. 고무는 자동으로 ×1(실제 비율)로 표시됩니다.</p>
+      </div>
+      <div>
+        <h3>📐 계산 가정</h3>
+        <p>보 길이 L = 6 m, 폭 b = 18 cm, 하중은 집중하중(g = 9.81 m/s²), 보 자중은 무시. 탄성 처짐은 오일러-베르누이 보 이론, 소성은 고정단 윗면 응력을 기준으로 한 단순화 모델(잔류 곡률 κ<sub>p</sub> = 2ε<sub>p</sub>/h)입니다. 교육용 근사이므로 실제 설계 계산과는 다를 수 있습니다.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 응력·단면계수 개념 페이지 (σ-ε 선도를 누르면 열림) -->
+<div id="conceptModal" class="modal-overlay">
+  <div class="modal-content wide">
+    <div class="modal-header blue">
+      <h2>🔍 휨응력 σ = M/S 와 단면계수 S = bh²/6</h2>
+      <button class="modal-close" id="btnCloseConcept">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="concept-grid">
+        <div>
+          <h3>1. 보가 휘면 단면에 응력이 생긴다</h3>
+          <p>캔틸레버에 하중 P를 올리면 고정단에 휨모멘트 <strong>M = P·x</strong>가 걸립니다. 휜 보의 단면을 보면 <strong>윗면은 늘어나고(인장) 아랫면은 눌립니다(압축)</strong>. 그 가운데, 늘지도 줄지도 않는 선이 <strong>중립축</strong>입니다. 응력은 중립축에서 0이고, 중립축에서 멀어질수록 <strong>거리 y에 비례해</strong> 커집니다.</p>
+          <div class="eq">σ(y) = M · y / I<br><small>I = 단면 2차모멘트 (직사각형: b·h³/12)</small></div>
+          <h3>2. 가장 큰 응력은 맨 바깥 면에서</h3>
+          <p>캔틸레버에서 가장 위험한 곳은 <strong>고정단의 맨 윗면</strong>입니다. 거리가 가장 먼 y = h/2 를 넣으면 최대 응력이 나옵니다. 이때 <strong>I ÷ (h/2)</strong> 를 한 덩어리로 묶은 것이 <strong>단면계수 S</strong>입니다.</p>
+          <div class="eq">σ<sub>max</sub> = M·(h/2) / I = M / S<br>S = I / (h/2) = <b>b·h² / 6</b> &nbsp;(직사각형 단면)</div>
+        </div>
+        <div>
+          <svg viewBox="0 0 320 300" xmlns="http://www.w3.org/2000/svg" aria-label="직사각형 단면과 휨응력 분포">
+            <rect x="0" y="0" width="320" height="300" fill="#f8f9fa" rx="12"/>
+            <!-- 단면 -->
+            <rect x="48" y="60" width="70" height="150" fill="#dfe4ea" stroke="#2f3542" stroke-width="2.5"/>
+            <line x1="40" y1="135" x2="126" y2="135" stroke="#0984e3" stroke-width="1.5" stroke-dasharray="5 3"/>
+            <text x="22" y="139" font-size="11" fill="#0984e3" font-family="IBM Plex Sans KR">N.A.</text>
+            <!-- 치수 -->
+            <line x1="48" y1="228" x2="118" y2="228" stroke="#2f3542" stroke-width="1"/>
+            <text x="78" y="243" font-size="12" text-anchor="middle" fill="#2f3542" font-family="IBM Plex Mono">b</text>
+            <line x1="32" y1="60" x2="32" y2="210" stroke="#2f3542" stroke-width="1"/>
+            <text x="20" y="139" font-size="12" text-anchor="middle" fill="#2f3542" font-family="IBM Plex Mono" transform="translate(-6 0)">h</text>
+            <text x="83" y="52" font-size="11" text-anchor="middle" fill="#c0392b" font-family="IBM Plex Sans KR">윗면: 인장 (+)</text>
+            <!-- 응력 분포 -->
+            <polygon points="190,135 262,60 190,60" fill="rgba(255,71,87,0.25)" stroke="#ff4757" stroke-width="2"/>
+            <polygon points="190,135 118,210 190,210" fill="rgba(31,111,178,0.22)" stroke="#1f6fb2" stroke-width="2"/>
+            <line x1="190" y1="50" x2="190" y2="220" stroke="#2f3542" stroke-width="1.5"/>
+            <line x1="180" y1="135" x2="200" y2="135" stroke="#0984e3" stroke-width="1.5"/>
+            <text x="268" y="64" font-size="11" fill="#c0392b" font-family="IBM Plex Mono">σmax = M/S</text>
+            <text x="196" y="130" font-size="10" fill="#0984e3" font-family="IBM Plex Sans KR">σ = 0</text>
+            <text x="200" y="224" font-size="10" fill="#1f6fb2" font-family="IBM Plex Sans KR">압축 (−)</text>
+            <text x="160" y="270" font-size="11" text-anchor="middle" fill="#57606f" font-family="IBM Plex Sans KR">응력은 중립축에서 거리 y 에 비례 → 바깥 면에서 최대</text>
+            <text x="160" y="288" font-size="11" text-anchor="middle" fill="#57606f" font-family="IBM Plex Sans KR">S = bh²/6 가 클수록 같은 M 에서 σ 가 작다</text>
+          </svg>
+          <h3 style="margin-top:10px">3. 지금 이 보에서는?</h3>
+          <div class="live-box" id="conceptLive">b = 18 cm, h = 28 cm → S = 2,352 cm³</div>
+        </div>
+      </div>
+      <div>
+        <h3>4. 왜 두께 h가 중요한가</h3>
+        <p>S 는 <strong>h의 제곱</strong>에 비례합니다. 두께를 2배로 하면 S 는 4배가 되어, 같은 모멘트에서 응력이 1/4로 줄어듭니다. 처짐을 결정하는 I 는 <strong>h의 세제곱</strong>이라 더 민감합니다. 아래 두께 슬라이더를 움직이면 이 값이 바로 바뀌는 것을 표에서 볼 수 있습니다.</p>
+      </div>
+      <div>
+        <h3>5. 응력-변형률 선도에서 읽는 법</h3>
+        <p>선도의 <strong>파란 점</strong>이 지금 고정단 윗면의 (ε, σ) 입니다. 직선 구간(기울기 E)에 있으면 <strong>탄성</strong>이라 하중을 빼면 완전히 돌아오고, 항복강도 σ<sub>y</sub> 를 넘어 꺾인 구간으로 들어가면 <strong>소성</strong>이 시작되어 영구 변형이 남습니다. 극한강도 σ<sub>u</sub> 에 닿으면 파괴입니다. 즉, <strong>M 을 S 로 나눈 값이 σ<sub>y</sub>·σ<sub>u</sub> 와 어디쯤인지</strong>가 이 실험의 핵심입니다.</p>
+      </div>
+    </div>
+    <div class="modal-foot"><button type="button" class="arcade-btn success" id="btnConceptOk">✅ 이해했어요</button></div>
+  </div>
+</div>
+
+<!-- 실험 종료 · 점수 · 랭킹 -->
+<div id="endModal" class="modal-overlay">
+  <div class="modal-content">
+    <div class="modal-header dark">
+      <h2>🏁 실험 종료 · 내 점수</h2>
+      <button class="modal-close" id="btnCloseEnd">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="final-score">
+        <div class="num"><span id="endScore">0</span><span>점</span></div>
+        <div class="sub" id="endSub">미션 0 / 12 완료</div>
+        <div class="final-grade" id="endGrade">견습 엔지니어</div>
+      </div>
+      <div class="done-list" id="endDone"></div>
+      <div class="rank-form" id="rankForm">
+        <input type="text" id="rankName" maxlength="12" placeholder="이름 (최대 12자)" autocomplete="off">
+        <button type="button" class="arcade-btn success" id="btnRankSave" style="flex:0 0 auto">📝 랭킹 등록</button>
+      </div>
+      <div>
+        <h3>🏆 랭킹 (이 브라우저에 저장)</h3>
+        <div id="rankBox"><div class="rank-empty">아직 등록된 점수가 없습니다.</div></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="arcade-btn" id="btnEndContinue">계속 실험</button>
+      <button type="button" class="arcade-btn danger" id="btnEndRestart">🔄 처음부터</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ─────────────────────────────────────────────────────────────
+   1. 재료 물성치 정의 (Material Database)
+   단면: 폭 b=0.18m, 높이 h=0.28m, 길이 L=6.0m
+   단면 2차모멘트 I = b*h^3 / 12
+   단면계수 S = b*h^2 / 6
+   ───────────────────────────────────────────────────────────── */
+const BEAM_L = 6.0;   // 6 meters
+let BEAM_B = 0.18;    // 18 cm
+let BEAM_H = 0.28;    // 28 cm
+const BEAM_H0 = 0.28; // 3D 메시를 생성할 때 기준 두께 (슬라이더 스케일 기준)
+let BEAM_I = (BEAM_B * Math.pow(BEAM_H, 3)) / 12;
+let BEAM_S = (BEAM_B * Math.pow(BEAM_H, 2)) / 6;
+
+const MATERIALS = {
+  mild_steel: {
+    name: '연강 SS275',
+    color: 0x4b6584,
+    topColor: 0x778ca3,
+    E: 200e3,       // 200 GPa = 200,000 MPa
+    fy: 275,        // 항복강도 275 MPa
+    fu: 410,        // 극한강도 410 MPa
+    ey: 0.00138,
+    eu: 0.16,
+    ef: 0.25,
+    ductile: true,
+    brittle: false,
+    description: '항복(275 MPa) 뒤에도 크게 휘며 끈질기게 버팁니다. 항복을 넘긴 뒤 하중을 빼면 영구 처짐이 남는지 확인해 보세요.'
+  },
+  high_steel: {
+    name: '고장력강 (High-Strength)',
+    color: 0x3867d6,
+    topColor: 0x4b7bec,
+    E: 200e3,       // 200,000 MPa
+    fy: 500,        // 500 MPa
+    fu: 620,        // 620 MPa
+    ey: 0.0025,
+    eu: 0.08,
+    ef: 0.12,
+    ductile: true,
+    brittle: false,
+    description: '항복강도가 500 MPa로 높아 같은 하중에서도 탄성을 오래 유지합니다. 대신 늘어날 수 있는 양(연성)은 연강보다 작습니다.'
+  },
+  concrete: {
+    name: '콘크리트 (무근)',
+    color: 0xa5b1c2,
+    topColor: 0xd1d8e0,
+    E: 25e3,        // 25,000 MPa
+    fy: 3.2,        // 인장균열강도 (상단 인장에 매우 취약!) 3.2 MPa
+    fu: 3.5,        // 인장 극한 3.5 MPa
+    ey: 0.00013,
+    eu: 0.00015,
+    ef: 0.0002,
+    ductile: false,
+    brittle: true,
+    limitName: '인장 균열강도 σ_cr',
+    description: '인장강도가 약 3 MPa뿐이라 캔틸레버 윗면(인장)에서 시험추 몇 개만으로 예고 없이 깨집니다. → 철근이 필요한 이유!'
+  },
+  wood: {
+    name: '구조용 목재',
+    color: 0xcd8433,
+    topColor: 0xe5a359,
+    E: 11e3,        // 11,000 MPa
+    fy: 30,         // 휨항복 30 MPa
+    fu: 42,         // 휨극한 42 MPa
+    ey: 0.0027,
+    eu: 0.012,
+    ef: 0.018,
+    ductile: false,
+    brittle: true,
+    limitName: '비례한도 σ_pl',
+    description: '탄성계수가 강재의 약 1/18이라 잘 휘지만, 소성 변형 없이 한계에서 갑자기 쪼개지는 취성 파괴를 보입니다.'
+  },
+  rubber: {
+    name: '고무 (초탄성)',
+    color: 0xf7b731,
+    topColor: 0xfed330,
+    E: 0.15e3,      // 150 MPa (매우 유연함)
+    fy: 40,
+    fu: 60,
+    ey: 0.25,
+    eu: 0.60,
+    ef: 0.90,
+    ductile: true,
+    brittle: false,
+    isRubber: true,
+    limitName: '탄성 선형한계',
+    description: '탄성계수가 매우 작아 작업자 한 명에도 크게 휘지만, 소성이 없어 하중을 빼면 완전히 복원됩니다. (화면은 실제 비율 ×1)'
+  }
+};
+
+let currentMatKey = 'mild_steel';
+let currentMat = MATERIALS[currentMatKey];
+
+/* ─────────────────────────────────────────────────────────────
+   2. 시뮬레이션 상태 변수
+   ───────────────────────────────────────────────────────────── */
+let characters = []; // [{ id, type, weight, xPos, mesh, onBeam, ... }]
+let isBroken = false;
+let currentMaxMoment = 0;
+let currentMaxStress = 0;
+let currentDeflection = 0;
+let soundEnabled = true;
+
+/* 토스트 메시지 함수 (alert 대신 사용) */
+let toastTimer = null;
+function showToast(msg, type = 'normal') {
+  const t = document.getElementById('toast');
+  if (!t) return;
+  t.textContent = msg;
+  const modalOpen = !!document.querySelector('.modal-overlay.open');
+  t.className = 'toast-box ' + type + ' show' + (modalOpen ? ' over-modal' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    t.classList.remove('show');
+  }, 2800);
+}
+
+/* 오디오 컨텍스트 (Web Audio API 귀여운 복셀 사운드) */
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let audioCtx = null;
+function unlockAudio() {
+  if (!audioCtx) audioCtx = new AudioCtx();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+window.addEventListener('click', unlockAudio, { once: true });
+window.addEventListener('touchstart', unlockAudio, { once: true });
+
+function playSound(type) {
+  if (!soundEnabled) return;
+  try {
+    unlockAudio();
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    if (type === 'drop') {
+      // 뿅/착지 소리
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(340, now);
+      osc.frequency.exponentialRampToValueAtTime(180, now + 0.12);
+      gain.gain.setValueAtTime(0.35, now);
+      gain.gain.linearRampToValueAtTime(0, now + 0.12);
+      osc.start(now); osc.stop(now + 0.12);
+    } else if (type === 'plastic') {
+      // 삐걱 소리 (항복)
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(160, now);
+      osc.frequency.linearRampToValueAtTime(90, now + 0.28);
+      gain.gain.setValueAtTime(0.25, now);
+      gain.gain.linearRampToValueAtTime(0, now + 0.28);
+      osc.start(now); osc.stop(now + 0.28);
+    } else if (type === 'snap') {
+      // 쾅/파괴 소리
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(220, now);
+      osc.frequency.exponentialRampToValueAtTime(30, now + 0.55);
+      gain.gain.setValueAtTime(0.7, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.55);
+      osc.start(now); osc.stop(now + 0.55);
+    } else if (type === 'splash') {
+      // 첨벙 (저역 통과한 잡음)
+      const len = 0.5;
+      const buf = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * len), audioCtx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 2.2);
+      const src = audioCtx.createBufferSource();
+      src.buffer = buf;
+      const lp = audioCtx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(2200, now);
+      lp.frequency.exponentialRampToValueAtTime(260, now + len);
+      src.connect(lp); lp.connect(gain);
+      gain.gain.setValueAtTime(0.55, now);
+      gain.gain.linearRampToValueAtTime(0, now + len);
+      src.start(now); src.stop(now + len);
+    } else if (type === 'recover') {
+      // 복원 팅! 소리
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(440, now);
+      osc.frequency.exponentialRampToValueAtTime(880, now + 0.16);
+      gain.gain.setValueAtTime(0.25, now);
+      gain.gain.linearRampToValueAtTime(0, now + 0.16);
+      osc.start(now); osc.stop(now + 0.16);
+    }
+  } catch (e) {}
+}
+
+/* ─────────────────────────────────────────────────────────────
+   3. Three.js 복셀 씬 셋업 (정면·단면 고정 뷰)
+   ───────────────────────────────────────────────────────────── */
+const canvas = document.getElementById('canvas3d');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x62bcf2);   // 먼 배경 그림의 하늘 윗부분과 같은 색
+
+// 직교 카메라. 기본은 정면(단면) 시점: 아주 살짝 위에서 내려다봐 수면·땅 윗면이 조금 보이게
+const CAM_ELEV = 0.1;   // 단면 시점의 내려다보는 각 [rad]
+const camDist = 30;
+const camera = new THREE.OrthographicCamera(-8, 8, 5, -5, -60, 140);
+
+// 조명 (화사한 복셀 햇살, 정면 오른쪽 위에서)
+const hemiLight = new THREE.HemisphereLight(0xffffff, 0x8fb8d8, 0.75);
+scene.add(hemiLight);
+
+const dirLight = new THREE.DirectionalLight(0xfff7e6, 0.85);
+dirLight.position.set(10, 22, 16);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.width = 2048;
+dirLight.shadow.mapSize.height = 2048;
+dirLight.shadow.camera.left = -16;
+dirLight.shadow.camera.right = 16;
+dirLight.shadow.camera.top = 16;
+dirLight.shadow.camera.bottom = -16;
+dirLight.shadow.camera.near = 1;
+dirLight.shadow.camera.far = 70;
+dirLight.shadow.bias = -0.001;
+scene.add(dirLight);
+
+/* ─────────────────────────────────────────────────────────────
+   4. 복셀 환경: 왼쪽 땅의 낭떠러지 · 그 아래 호수 · 먼 배경(그림)
+   - 시점이 정면 고정이므로 땅과 호수를 '잘라 본 단면'처럼 앞면을 복셀 블록으로 꾸민다
+   - 다리(캔틸레버)는 낭떠러지 끝에 고정되어 호수 위로 뻗어 있고, 부러지면 호수에 빠진다
+   ───────────────────────────────────────────────────────────── */
+const CLIFF_TOP = BEAM_H0 / 2;     // 땅 윗면 = 보 윗면 (땅에서 다리 상판이 이어지는 느낌)
+const WATER_Y = -3.0;              // 호수 수면
+const LAKE_BED = -4.2;             // 호수 바닥
+const WORLD_FRONT = 1.5;           // 땅·호수 단면(앞면)의 z (0.5 m 블록 격자가 z = 0 에 맞게)
+const WORLD_BACK = -12;            // 땅·호수의 뒤쪽 끝 z (그 뒤는 배경 그림)
+const WORLD_BOTTOM = -8;
+const CLIFF_X0 = -18;
+// 1 m 층마다 절벽면이 호수 쪽으로 나온 정도 (위층 → 아래층). 맨 위 두 층은 보가 박힌 수직면(x = 0)
+const CLIFF_FACE = [0, 0, 0.2, 0.5, 0.8, 1.0, 1.1, 1.15, 1.2];
+function cliffFaceX(y) {           // 높이 y 에서 절벽면의 x (이보다 왼쪽은 땅 속). 땅 위쪽이면 -∞
+  if (y > CLIFF_TOP) return -Infinity;
+  const r = Math.min(CLIFF_FACE.length - 1, Math.floor((CLIFF_TOP - y) / 1.0));
+  return CLIFF_FACE[r];
+}
+// 화면에 반드시 들어와야 하는 영역 (보 전체 + 위쪽 하중물 + 아래 호수 바닥)
+const VIEW_BOX = { x0: -1.3, x1: 7.4, y0: LAKE_BED - 0.2, y1: 1.6 };
+
+const worldGroup = new THREE.Group();
+scene.add(worldGroup);
+const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
+const lambert = c => new THREE.MeshLambertMaterial({ color: c });
+function addBox(w, h, d, mat, x, y, z, opts = {}) {
+  const m = new THREE.Mesh(UNIT_BOX, mat);
+  m.scale.set(w, h, d);
+  m.position.set(x, y, z);
+  m.castShadow = opts.cast !== false;
+  m.receiveShadow = true;
+  (opts.parent || worldGroup).add(m);
+  return m;
+}
+let worldSeed = 11;
+function wrand() { worldSeed = (worldSeed * 16807) % 2147483647; return worldSeed / 2147483647; }
+
+// ── 왼쪽 땅 (낭떠러지): 0.5 m 복셀 블록 약 2천 개를 InstancedMesh 하나로 (어느 방향에서 봐도 블록 땅)
+const M_GRASS = lambert(0x7ed56f), M_GRASS_DK = lambert(0x62b957);
+const M_ROCK = [lambert(0x8a979a), lambert(0x77868a), lambert(0x67777b), lambert(0x939f9c)];
+const VOX = 0.5;
+const voxList = [];   // [x, y, z, w, h, d, color]
+function vox(x, y, z, w, h, d, hex, jitter = 0.07) {
+  const c = new THREE.Color(hex);
+  const k = 1 + (wrand() - 0.5) * 2 * jitter;
+  c.setRGB(Math.min(1, c.r * k), Math.min(1, c.g * k), Math.min(1, c.b * k));
+  voxList.push([x, y, z, w, h, d, c]);
+}
+// 깊이에 따른 땅 색: 흙 → 흙·바위 섞임 → 바위(1.5 m 마다 옅은 지층 띠), 수면 근처는 이끼
+function soilColor(y) {
+  const depth = CLIFF_TOP - y, r = wrand();
+  if (depth < 0.6) return [0xa8774a, 0x9a6a42, 0xb3814f][Math.floor(r * 3)];
+  if (depth < 1.6) return [0x8f6340, 0x9a6a42, 0x7f5a3c][Math.floor(r * 3)];
+  if (depth < 2.4) return r < 0.4 ? 0x7f5a3c : [0x8a979a, 0x77868a][Math.floor(wrand() * 2)];
+  if (Math.abs(y - WATER_Y) < 0.55 && r < 0.65) return r < 0.3 ? 0x4f7a5a : 0x5d7d62;
+  const ROCKS = Math.floor((depth - 2.4) / 1.5) % 2 ? [0x8a979a, 0x939f9c, 0x7f8c8d] : [0x77868a, 0x67777b, 0x6f7f83];
+  return ROCKS[Math.floor(r * 3)];
+}
+const PATH_X0 = -7.5;                                   // 다리로 이어지는 흙길 (z = −0.5 ~ 0.5)
+const onPath = (x, z) => x >= PATH_X0 - 1e-6 && z >= -0.5 - 1e-6 && z < 0.5 - 1e-6;
+{
+  // 안쪽 채움 (보이지 않는 속)
+  const body = new THREE.Mesh(UNIT_BOX, lambert(0x6d4c33));
+  body.scale.set(-0.5 - CLIFF_X0, CLIFF_TOP - 0.05 - WORLD_BOTTOM, (WORLD_FRONT - VOX) - WORLD_BACK);
+  body.position.set((CLIFF_X0 - 0.5) / 2, (CLIFF_TOP - 0.05 + WORLD_BOTTOM) / 2, (WORLD_FRONT - VOX + WORLD_BACK) / 2);
+  worldGroup.add(body);
+  for (let yTop = CLIFF_TOP; yTop > WORLD_BOTTOM + 1e-6; yTop -= VOX) {
+    const yBot = Math.max(WORLD_BOTTOM, yTop - VOX), yc = (yTop + yBot) / 2, h = yTop - yBot;
+    const face = cliffFaceX(yc);
+    const ledge = face > cliffFaceX(yTop + 0.01) + 0.05;   // 윗층보다 튀어나와 윗면이 드러난 층 → 이끼
+    // ① 앞 단면 (z = WORLD_FRONT)
+    for (let x = CLIFF_X0; x < face - 1e-6; x += VOX) {
+      const x1 = (x + VOX >= face - 0.05 || x + VOX > -0.5) ? face : x + VOX;
+      vox((x + x1) / 2, yc, WORLD_FRONT - VOX / 2 + (wrand() - 0.5) * 0.06, x1 - x, h, VOX, soilColor(yc));
+      if (x1 >= face) break;
+    }
+    // ② 호수 쪽 절벽면 (x = face): 앞 단면 뒤로 땅 끝까지, 블록마다 살짝 울퉁불퉁
+    for (let z = WORLD_BACK; z < WORLD_FRONT - VOX - 1e-6; z += VOX) {
+      const jx = (wrand() - 0.5) * 0.08;
+      vox((-0.5 + face) / 2 + jx / 2, yc, z + VOX / 2, face + 0.5 + jx, h, VOX, ledge && wrand() < 0.8 ? 0x6f9e5a : soilColor(yc));
+    }
+  }
+  // ③ 윗면: 잔디 타일(높낮이·색 조금씩 다르게) + 흙길, 가장자리는 두툼한 잔디 테두리
+  const GRASS = [0x7ed56f, 0x74cc65, 0x86db76, 0x6fc463];
+  for (let x = CLIFF_X0; x < -1e-6; x += VOX) {
+    for (let z = WORLD_BACK; z < WORLD_FRONT - 1e-6; z += VOX) {
+      const cx = x + VOX / 2, cz = z + VOX / 2;
+      const edgeF = z + VOX >= WORLD_FRONT - 1e-6, edgeS = x + VOX >= -1e-6;
+      if (onPath(x, z)) {
+        const hp = 0.1 + wrand() * 0.02;
+        vox(cx, CLIFF_TOP - 0.08 + hp / 2, cz, VOX, hp, VOX, wrand() < 0.5 ? 0xd7bf8a : 0xcbb07a, 0.05);
+        if (edgeS) vox(cx, CLIFF_TOP - 0.2, cz, VOX + 0.02, 0.16, VOX, 0xb8995f, 0.04);
+        continue;
+      }
+      const top = 0.03 + wrand() * 0.06;
+      const patch = Math.sin(cx * 0.55 + 1.3) + Math.cos(cz * 0.75 - 0.4) > 1.25;
+      const hex = patch ? 0x62b957 : GRASS[Math.floor(wrand() * GRASS.length)];
+      if (edgeF || edgeS) {
+        const w = VOX + (edgeS ? 0.04 : 0), d = VOX + (edgeF ? 0.04 : 0);
+        vox(cx + (edgeS ? 0.02 : 0), CLIFF_TOP - 0.24 + (0.24 + top) / 2, cz + (edgeF ? 0.02 : 0), w, 0.24 + top, d, hex, 0.04);
+        if (wrand() < 0.35) vox(cx + (edgeS ? 0.025 : 0), CLIFF_TOP - 0.31, cz + (edgeF ? 0.025 : 0), edgeS ? VOX + 0.05 : VOX * (0.4 + wrand() * 0.5), 0.14, edgeF ? VOX + 0.05 : VOX * (0.4 + wrand() * 0.5), 0x5aae50, 0.05);
+      } else {
+        vox(cx, CLIFF_TOP - 0.06 + (0.06 + top) / 2, cz, VOX, 0.06 + top, VOX, hex, 0.04);
+      }
+    }
+  }
+  // ④ 꽃·풀 무더기 (길은 피해서)
+  const FLOW = [0xffffff, 0xffe066, 0xff8fab, 0x5aae50, 0x5aae50, 0x5aae50];
+  for (let i = 0; i < 90; i++) {
+    const x = CLIFF_X0 + 0.4 + wrand() * (-CLIFF_X0 - 0.9), z = WORLD_BACK + 0.4 + wrand() * (WORLD_FRONT - WORLD_BACK - 0.9);
+    if (onPath(x - 0.25, z - 0.25) || (x > PATH_X0 - 0.3 && Math.abs(z) < 0.85)) continue;
+    const sz = 0.08 + wrand() * 0.1;
+    vox(x, CLIFF_TOP + 0.08 + sz / 2, z, sz, sz, sz, FLOW[Math.floor(wrand() * FLOW.length)], 0.03);
+  }
+  // ⑤ 절벽에 늘어진 덩굴 (앞 단면 · 호수 쪽 면, 다리 근처는 비움)
+  for (let i = 0; i < 9; i++) {
+    const x = CLIFF_X0 + 1 + wrand() * (-CLIFF_X0 - 2.2), len = 0.5 + wrand() * 1.5;
+    vox(x, CLIFF_TOP - 0.25 - len / 2, WORLD_FRONT + 0.02, 0.07, len, 0.04, 0x3f8f4a, 0.1);
+    for (let k = 0; k < 2; k++) vox(x + 0.04, CLIFF_TOP - 0.3 - len * wrand(), WORLD_FRONT + 0.03, 0.15, 0.1, 0.05, 0x56b45e, 0.1);
+  }
+  for (let i = 0; i < 10; i++) {
+    const z = WORLD_BACK + 0.8 + wrand() * (WORLD_FRONT - WORLD_BACK - 1.6);
+    if (Math.abs(z) < 0.8) continue;
+    const len = 0.5 + wrand() * 1.6;
+    vox(0.04, CLIFF_TOP - 0.25 - len / 2, z, 0.04, len, 0.07, 0x3f8f4a, 0.1);
+    vox(0.05, CLIFF_TOP - 0.3 - len * wrand(), z + 0.04, 0.05, 0.1, 0.15, 0x56b45e, 0.1);
+  }
+  // ⑥ 흙길 양옆 나무 울타리 (다리 입구까지)
+  for (const zf of [-0.74, 0.74]) {
+    for (let x = PATH_X0 + 0.5; x <= -0.6; x += 1.15) {
+      vox(x, CLIFF_TOP + 0.28, zf, 0.09, 0.5, 0.09, 0x8d6e4f, 0.05);
+      if (x + 1.15 <= -0.6) vox(x + 0.575, CLIFF_TOP + 0.4, zf, 1.15, 0.06, 0.05, 0xa1887f, 0.05);
+    }
+  }
+}
+// 땅 위 장식: 복셀 나무(둥근 나무·소나무) · 덤불 · 바위 · 경고 표지판
+const M_TRUNK = lambert(0x8b5a2b), M_LEAF = lambert(0x2fbf71), M_LEAF2 = lambert(0x5fd68a);
+const M_PINE = lambert(0x1f8a4c), M_PINE2 = lambert(0x2aa35c);
+function createVoxelTree(x, z, s = 1) {
+  const g = new THREE.Group();
+  addBox(0.45, 1.1, 0.45, M_TRUNK, 0, 0.55, 0, { parent: g });
+  addBox(1.4, 1.3, 1.4, M_LEAF, 0, 1.75, 0, { parent: g });
+  addBox(0.9, 0.6, 0.9, M_LEAF2, 0.1, 2.65, 0.1, { parent: g });
+  g.position.set(x, CLIFF_TOP, z);
+  g.scale.setScalar(s);
+  worldGroup.add(g);
+  return g;
+}
+function createPineTree(x, z, s = 1) {
+  const g = new THREE.Group();
+  addBox(0.28, 0.6, 0.28, M_TRUNK, 0, 0.3, 0, { parent: g });
+  [[1.3, 0.55, 0.75], [1.0, 0.5, 1.25], [0.7, 0.45, 1.7], [0.36, 0.35, 2.08]].forEach(([w, h, y], i) => {
+    addBox(w, h, w, i % 2 ? M_PINE2 : M_PINE, 0, y, 0, { parent: g });
+  });
+  g.position.set(x, CLIFF_TOP, z);
+  g.scale.setScalar(s);
+  worldGroup.add(g);
+  return g;
+}
+createVoxelTree(-2.8, -2.5, 1.0);
+createVoxelTree(-5.6, -6.0, 1.25);
+createVoxelTree(-8.6, -1.8, 0.95);
+createVoxelTree(-11.8, -7.0, 1.3);
+createVoxelTree(-14.5, -3.0, 1.05);
+createPineTree(-3.9, -5.2, 1.1);
+createPineTree(-10.0, -4.6, 1.3);
+createPineTree(-13.4, -9.4, 1.4);
+createPineTree(-16.4, -1.4, 1.2);
+createPineTree(-7.2, -9.6, 1.2);
+[[-1.7, 1.05, 0.5], [-4.3, -1.3, 0.65], [-6.9, 1.1, 0.5], [-10.4, -0.2, 0.6], [-15, 0.9, 0.55]].forEach(([x, z, s]) => {
+  addBox(s * 1.2, s * 0.55, s * 0.9, M_LEAF, x, CLIFF_TOP + 0.04 + s * 0.27, z);
+  addBox(s * 0.7, s * 0.3, s * 0.6, M_LEAF2, x + s * 0.15, CLIFF_TOP + 0.04 + s * 0.6, z);
+});
+addBox(0.5, 0.3, 0.45, M_ROCK[3], -3.6, CLIFF_TOP + 0.19, 1.05);
+addBox(0.3, 0.2, 0.3, M_ROCK[1], -3.2, CLIFF_TOP + 0.14, 1.3);
+addBox(0.6, 0.35, 0.5, M_ROCK[0], -12.6, CLIFF_TOP + 0.2, -1.0);
+{
+  // 낭떠러지 경고 표지판 (노란 판 + 느낌표) — 다리 입구 옆
+  const post = lambert(0x6d4c41), sign = lambert(0xf6c90e), ink = lambert(0x2f3542);
+  addBox(0.08, 0.75, 0.08, post, -0.9, CLIFF_TOP + 0.4, -1.05);
+  addBox(0.5, 0.42, 0.06, sign, -0.9, CLIFF_TOP + 0.85, -1.01);
+  addBox(0.07, 0.2, 0.02, ink, -0.9, CLIFF_TOP + 0.9, -0.97, { cast: false });
+  addBox(0.07, 0.06, 0.02, ink, -0.9, CLIFF_TOP + 0.74, -0.97, { cast: false });
+}
+
+// ── 호수: 반투명 물(앞면은 물속 단면), 모래 바닥, 수초·바위·연잎
+const LAKE_X1 = 40;
+const M_WATER_TOP = new THREE.MeshLambertMaterial({ color: 0x2ea6dd, transparent: true, opacity: 0.9, depthWrite: false });
+const M_WATER_FRONT = new THREE.MeshLambertMaterial({ color: 0x1c6fc0, transparent: true, opacity: 0.5, depthWrite: false });
+const M_WATER_BACK = lambert(0x1f5f9e);
+const M_HIDDEN = new THREE.MeshBasicMaterial({ visible: false });
+const water = new THREE.Mesh(UNIT_BOX, [M_WATER_FRONT, M_HIDDEN, M_WATER_TOP, M_HIDDEN, M_WATER_FRONT, M_WATER_BACK]);
+water.scale.set(LAKE_X1, WATER_Y - LAKE_BED, WORLD_FRONT + 0.06 - WORLD_BACK);
+water.position.set(LAKE_X1 / 2, (WATER_Y + LAKE_BED) / 2, (WORLD_FRONT + 0.06 + WORLD_BACK) / 2);
+water.receiveShadow = true;
+water.renderOrder = 2;
+scene.add(water);
+
+const M_SAND = lambert(0xe3cd93), M_SAND_DK = lambert(0xc9ad72), M_WEED = lambert(0x3f9b5a), M_PAD = lambert(0x4cbf5a);
+{
+  const bed = new THREE.Mesh(UNIT_BOX, [M_SAND_DK, M_SAND_DK, M_SAND, M_SAND_DK, M_SAND_DK, M_SAND_DK]);
+  bed.scale.set(LAKE_X1, LAKE_BED - WORLD_BOTTOM, WORLD_FRONT - WORLD_BACK);
+  bed.position.set(LAKE_X1 / 2, (LAKE_BED + WORLD_BOTTOM) / 2, (WORLD_FRONT + WORLD_BACK) / 2);
+  bed.receiveShadow = true;
+  worldGroup.add(bed);
+  // 모래 단면의 자갈 블록
+  for (let i = 0; i < 40; i++) {
+    const x = 1.2 + wrand() * 24, y = LAKE_BED - 0.3 - wrand() * 2.6, sz = 0.16 + wrand() * 0.26;
+    vox(x, y, WORLD_FRONT + 0.02, sz * 1.4, sz, 0.05, wrand() < 0.5 ? 0xd8bf82 : 0xb39a63);
+  }
+  // 수초 (물속)
+  [[2.2, 0.6, 0.9], [3.1, 0.4, 0.6], [5.4, 0.8, 1.1], [7.9, 0.3, 0.7], [10.5, 0.7, 0.9], [13.2, 0.5, 0.8]].forEach(([x, z, h]) => {
+    addBox(0.1, h, 0.1, M_WEED, x, LAKE_BED + h / 2, z);
+    addBox(0.1, h * 0.7, 0.1, M_WEED, x + 0.16, LAKE_BED + h * 0.35, z - 0.1);
+  });
+  // 수면 위로 솟은 바위
+  addBox(1.1, 2.1, 1.0, M_ROCK[1], 8.8, LAKE_BED + 1.05, -3.0);
+  addBox(0.7, 0.6, 0.7, M_ROCK[0], 8.6, LAKE_BED + 2.35, -3.1);
+  addBox(0.8, 1.9, 0.9, M_ROCK[2], 12.4, LAKE_BED + 0.95, -7.0);
+}
+// 연잎 (수면에서 살랑살랑)
+const lilyPads = [];
+[[2.6, -3.2], [4.9, -1.4], [6.6, -5.5], [10.2, -2.2], [3.8, -8.0]].forEach(([x, z], i) => {
+  const pad = addBox(0.55, 0.04, 0.5, M_PAD, x, WATER_Y + 0.02, z, { cast: false });
+  pad.rotation.y = i * 0.7;
+  lilyPads.push(pad);
+});
+// 오른쪽 먼 호숫가 (넓은 화면이나 축소했을 때 보임)
+{
+  const bank = new THREE.Mesh(UNIT_BOX, [M_SAND_DK, M_SAND_DK, M_GRASS, M_SAND_DK, M_SAND_DK, M_SAND_DK]);
+  bank.scale.set(LAKE_X1 - 15, WATER_Y + 0.45 - WORLD_BOTTOM, 6);
+  bank.position.set(15 + (LAKE_X1 - 15) / 2, (WATER_Y + 0.45 + WORLD_BOTTOM) / 2, WORLD_BACK + 3.2);
+  bank.receiveShadow = true;
+  worldGroup.add(bank);
+  [[17, -9.5, 0.9], [20.5, -10.2, 1.1], [24, -9.2, 0.8]].forEach(([x, z, sc]) => {
+    const t = createVoxelTree(x, z, sc);
+    t.position.y = WATER_Y + 0.45;
+  });
+}
+
+// 모아 둔 복셀 블록을 InstancedMesh 하나로 만든다
+{
+  const mesh = new THREE.InstancedMesh(UNIT_BOX, new THREE.MeshLambertMaterial({ color: 0xffffff }), voxList.length);
+  const mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), scl = new THREE.Vector3();
+  voxList.forEach((b, i) => {
+    mtx.compose(pos.set(b[0], b[1], b[2]), q, scl.set(b[3], b[4], b[5]));
+    mesh.setMatrixAt(i, mtx);
+    mesh.setColorAt(i, b[6]);
+  });
+  mesh.receiveShadow = true;
+  mesh.castShadow = true;
+  worldGroup.add(mesh);
+}
+
+// ── 먼 배경: 3D 모델 대신 한 장의 그림(캔버스로 그린 텍스처)을 호수 뒤에 세운다
+const BD_Z = WORLD_BACK - 1, BD_W = 120, BD_H = 50, BD_CX = 4, BD_Y0 = WATER_Y - 4;
+// 3D 호수 뒤끝과 그림 속 수면이 화면에서 같은 높이로 이어지게 (살짝 내려다보는 시점 보정)
+const BD_HORIZON = WATER_Y + (BD_Z - WORLD_BACK) * Math.tan(CAM_ELEV);
+function paintBackdrop() {
+  const W = 2048, H = 1024;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const g = cv.getContext('2d');
+  const X = x => (x - (BD_CX - BD_W / 2)) / BD_W * W;
+  const Y = y => H - (y - BD_Y0) / BD_H * H;
+  const ux = W / BD_W, uy = H / BD_H;
+  let sd = 5;
+  const rnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+  const SHORE = BD_HORIZON + 1.0;
+  // 하늘
+  const sky = g.createLinearGradient(0, Y(SHORE + 12), 0, Y(SHORE));
+  sky.addColorStop(0, '#62bcf2'); sky.addColorStop(0.65, '#a3dbf8'); sky.addColorStop(1, '#e2f6ff');
+  g.fillStyle = sky; g.fillRect(0, 0, W, H);
+  // 네모난 해
+  g.fillStyle = 'rgba(255, 249, 214, 0.55)'; g.fillRect(X(14) - 64, Y(7) - 64, 128, 128);
+  g.fillStyle = '#fff6c9'; g.fillRect(X(14) - 40, Y(7) - 40, 80, 80);
+  // 블록 구름
+  function cloud(cx, cy, k) {
+    const parts = [[-1.6, 0, 3.2, 0.7], [-1.0, 0.55, 1.9, 0.65], [0.1, 0.4, 1.3, 0.55]];
+    g.fillStyle = 'rgba(214, 236, 248, 0.95)';
+    g.fillRect(X(cx - 1.6 * k), Y(cy), 3.2 * k * ux, 0.18 * k * uy);
+    g.fillStyle = 'rgba(255, 255, 255, 0.96)';
+    parts.forEach(([bx, by, bw, bh]) => g.fillRect(X(cx + bx * k), Y(cy + (by + bh) * k), bw * k * ux, bh * k * uy));
+  }
+  [[-9, 5.0, 1.2], [1.5, 6.9, 1.5], [8.5, 4.3, 1.0], [19, 6.2, 1.3], [-18, 7.2, 1.4], [27, 4.0, 1.1], [-27, 4.6, 1.0]].forEach(c => cloud(...c));
+  // 먼 산 (계단식 복셀 실루엣, 멀수록 연하게)
+  function ridge(color, hMin, hMax, colW, step, ph) {
+    g.fillStyle = color;
+    for (let x = BD_CX - BD_W / 2; x < BD_CX + BD_W / 2; x += colW) {
+      const n = 0.5 + 0.25 * Math.sin(x * 0.21 + ph) + 0.15 * Math.sin(x * 0.53 + ph * 2.3) + 0.1 * Math.sin(x * 1.37 + ph * 0.7);
+      const h = Math.max(step, Math.round((hMin + (hMax - hMin) * n) / step) * step);
+      g.fillRect(X(x), Y(SHORE + h), colW * ux + 1, H - Y(SHORE + h));
+    }
+  }
+  ridge('#bcdeec', 1.4, 4.6, 1.2, 0.4, 0.3);
+  ridge('#9fcbdd', 0.7, 2.8, 1.0, 0.35, 2.1);
+  ridge('#8cc596', 0.2, 1.1, 0.8, 0.25, 4.0);
+  // 언덕 위 작은 나무
+  g.fillStyle = '#6aad78';
+  for (let i = 0; i < 70; i++) {
+    const x = BD_CX - BD_W / 2 + rnd() * BD_W, th = 0.25 + rnd() * 0.3;
+    g.fillRect(X(x), Y(SHORE + 0.2 + th), 0.32 * ux, th * uy);
+  }
+  // 먼 호숫가 모래 띠와 먼 호수
+  g.fillStyle = '#ecdfae'; g.fillRect(0, Y(SHORE + 0.12), W, 0.16 * uy);
+  const lake = g.createLinearGradient(0, Y(SHORE), 0, Y(BD_HORIZON - 0.3));
+  lake.addColorStop(0, '#b4e5f5'); lake.addColorStop(1, '#79c8ec');
+  g.fillStyle = lake; g.fillRect(0, Y(SHORE), W, H - Y(SHORE));
+  g.fillStyle = 'rgba(255, 255, 255, 0.38)';
+  for (let i = 0; i < 70; i++) {
+    const x = BD_CX - BD_W / 2 + rnd() * BD_W, y = BD_HORIZON + 0.1 + rnd() * 0.8;
+    g.fillRect(X(x), Y(y), (0.3 + rnd() * 0.6) * ux, 1);
+  }
+  return new THREE.CanvasTexture(cv);
+}
+// 정면(단면) 시점 전용 그림이라, 시점을 돌리면 서서히 사라진다 (updateProjection)
+const backdrop = new THREE.Mesh(new THREE.PlaneGeometry(BD_W, BD_H), new THREE.MeshBasicMaterial({ map: paintBackdrop(), transparent: true, depthWrite: false }));
+backdrop.position.set(BD_CX, BD_Y0 + BD_H / 2, BD_Z);
+scene.add(backdrop);
+
+// 착지 먼지 퐁퐁 파티클 그룹
+const puffGroup = new THREE.Group();
+scene.add(puffGroup);
+const activePuffs = [];
+
+const puffMat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 }); // 공유 재질
+function emitPuff(x, y, z) {
+  for (let i = 0; i < 6; i++) {
+    const size = 0.08 + Math.random() * 0.08;
+    const p = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), puffMat);
+    p.position.set(x + (Math.random() - 0.5) * 0.15, y + 0.06, z + (Math.random() - 0.5) * 0.15);
+    p.userData = {
+      vx: (Math.random() - 0.5) * 1.4,
+      vy: Math.random() * 0.9 + 0.4,
+      vz: (Math.random() - 0.5) * 1.4,
+      life: 1.0
+    };
+    puffGroup.add(p);
+    activePuffs.push(p);
+  }
+}
+
+// 물 첨벙: 물방울 + 퍼지는 물결
+const splashGroup = new THREE.Group();
+scene.add(splashGroup);
+const SPLASH_MAT = new THREE.MeshLambertMaterial({ color: 0xeaf9ff, transparent: true, opacity: 0.92 });
+const RIPPLE_GEO = new THREE.RingGeometry(0.42, 0.52, 28);
+const splashDrops = [], ripples = [];
+let splashCount = 0, lastSplashT = -1, lastSplashX = 1e9, lastSplashSound = -1;
+function emitSplash(x, z, power) {
+  splashCount++;
+  const now = performance.now() / 1000;
+  if (now - lastSplashT < 0.1 && Math.abs(x - lastSplashX) < 0.5) return;   // 연달아 떨어지는 블록은 묶어서
+  lastSplashT = now; lastSplashX = x;
+  const n = Math.round(6 + 10 * power);
+  for (let i = 0; i < n; i++) {
+    const d = new THREE.Mesh(UNIT_BOX, SPLASH_MAT);
+    const sz = 0.06 + Math.random() * 0.09;
+    d.scale.set(sz, sz, sz);
+    d.position.set(x + (Math.random() - 0.5) * 0.3, WATER_Y + 0.05, z + (Math.random() - 0.5) * 0.3);
+    d.userData = { vx: (Math.random() - 0.5) * 2.2, vy: (1.8 + Math.random() * 3) * (0.5 + power * 0.6), vz: (Math.random() - 0.5) * 1.5 };
+    splashGroup.add(d);
+    splashDrops.push(d);
+  }
+  const ring = new THREE.Mesh(RIPPLE_GEO, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false }));
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.set(x, WATER_Y + 0.015, z);
+  ring.userData = { life: 1 };
+  splashGroup.add(ring);
+  ripples.push(ring);
+  if (now - lastSplashSound > 0.25) { lastSplashSound = now; playSound('splash'); }
+}
+
+// 떨어지는 물체(보 파편·하중물) 한 프레임: 공기 중엔 중력, 물속에선 부력·저항, 절벽·호수 바닥과 충돌
+function stepFalling(obj, v, halfW, bottom, dt) {
+  if (v.rest) return;
+  const p = obj.position;
+  const prevY = p.y;
+  if (p.y < WATER_Y) {
+    const k = Math.exp(-2.8 * dt);
+    v.vx *= k; v.vz *= k; v.vy = v.vy * k - 1.6 * dt;
+    v.rx = (v.rx || 0) * k; v.ry = (v.ry || 0) * k; v.rz = (v.rz || 0) * k;
+  } else {
+    v.vy -= 9.8 * dt;
+  }
+  p.x += v.vx * dt; p.y += v.vy * dt; p.z += v.vz * dt;
+  obj.rotation.x += v.rx || 0; obj.rotation.y += v.ry || 0; obj.rotation.z += v.rz || 0;
+  // 호수 단면 앞/뒤 밖으로 나가지 않게
+  if (p.z > WORLD_FRONT - 0.45) { p.z = WORLD_FRONT - 0.45; v.vz = -Math.abs(v.vz) * 0.3; }
+  if (p.z < WORLD_BACK + 1) { p.z = WORLD_BACK + 1; v.vz = Math.abs(v.vz) * 0.3; }
+  // 절벽(땅): 위에서 떨어지면 잔디 위에 얹히고, 옆에서 부딪히면 호수 쪽으로 튕김
+  const face = cliffFaceX(p.y - bottom);
+  if (p.x - halfW < face) {
+    if (prevY - bottom >= CLIFF_TOP - 1e-6) {
+      p.y = CLIFF_TOP + bottom; v.vy = 0; v.vx *= 0.6; v.vz *= 0.6;
+    } else {
+      p.x = face + halfW; v.vx = Math.abs(v.vx) * 0.3;
+    }
+  }
+  if (prevY >= WATER_Y && p.y < WATER_Y) {
+    emitSplash(p.x, p.z, Math.min(1.4, Math.abs(v.vy) / 5));
+    v.vy *= 0.4; v.vx *= 0.6;
+  }
+  if (p.y - bottom < LAKE_BED) {
+    p.y = LAKE_BED + bottom; v.vy = 0; v.vx *= 0.4; v.vz *= 0.4;
+    v.rx = (v.rx || 0) * 0.3; v.ry = (v.ry || 0) * 0.3; v.rz = (v.rz || 0) * 0.3;
+    if (Math.hypot(v.vx, v.vz) < 0.05) v.rest = true;
+  }
+}
+
+// 고정 지점 브라켓 (낭떠러지에 박힌 고정단 표시)
+const bracket = new THREE.Mesh(
+  new THREE.BoxGeometry(0.3, BEAM_H * 1.8, BEAM_B * 1.8),
+  new THREE.MeshLambertMaterial({ color: 0xd63031 })
+);
+bracket.position.set(0.05, 0, 0);
+bracket.castShadow = true;
+scene.add(bracket);
+
+/* ─────────────────────────────────────────────────────────────
+   5. 분절형 복셀 캔틸레버 보 (Segmented Beam Mesh)
+   - 40개의 복셀 블록(0.15 m)으로 구성하여 실시간 휨곡선 및 응력 히트맵 구현 (소성 계산 격자 240개는 별도)
+   ───────────────────────────────────────────────────────────── */
+const NUM_SEGS = 40;   // 0.15 m 블록 40개 (휨·바닥 접촉 곡선을 부드럽게, 소성 구간 해상도 ↑)
+const segLength = BEAM_L / NUM_SEGS;
+const beamGroup = new THREE.Group();
+const beamSegments = [];
+const SCAR_MAT = new THREE.MeshLambertMaterial({ color: 0xffa502 });
+
+for (let i = 0; i < NUM_SEGS; i++) {
+  // 각 세그먼트마다 개별 머티리얼을 가져 응력 히트맵 독립 렌더링
+  const sMat = new THREE.MeshLambertMaterial({ color: currentMat.color });
+  const sTopMat = new THREE.MeshLambertMaterial({ color: currentMat.topColor });
+  const segGeo = new THREE.BoxGeometry(segLength * 0.98, BEAM_H, BEAM_B);
+  const materials = [
+    sMat, sMat,       // right, left
+    sTopMat, sMat,    // top, bottom
+    sMat, sMat        // front, back
+  ];
+  const segMesh = new THREE.Mesh(segGeo, materials);
+  segMesh.castShadow = true;
+  segMesh.receiveShadow = true;
+  // 앞면 윗부분 주황 띠: 소성 흔적 (하중을 빼도 남음)
+  const scar = new THREE.Mesh(new THREE.BoxGeometry(segLength * 0.98, BEAM_H * 0.2, 0.012), SCAR_MAT);
+  scar.position.set(0, BEAM_H * 0.4, BEAM_B / 2 + 0.007);
+  scar.visible = false;
+  segMesh.add(scar);
+  segMesh.userData.scar = scar;
+  beamGroup.add(segMesh);
+  beamSegments.push(segMesh);
+}
+scene.add(beamGroup);
+
+// 바닥 눈금자 (고정단에서의 거리 x) — M = P·x 의 x를 눈으로 읽을 수 있게
+function makeTextSprite(text, color = '#2f3542') {
+  const cv = document.createElement('canvas');
+  cv.width = 128; cv.height = 64;
+  const ctx = cv.getContext('2d');
+  ctx.font = 'bold 34px "IBM Plex Mono", monospace';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+  ctx.strokeText(text, 64, 32);
+  ctx.fillStyle = color;
+  ctx.fillText(text, 64, 32);
+  const tex = new THREE.CanvasTexture(cv);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+  sp.scale.set(0.9, 0.45, 1);
+  return sp;
+}
+// 보 아래에 붙어 따라다니는 거리 라벨 (보가 휘어도 위치 x를 읽을 수 있게)
+const beamLabels = [];
+for (let i = 1; i <= BEAM_L; i++) {
+  const lbl = makeTextSprite(`${i}m`, '#57606f');
+  lbl.scale.set(0.8, 0.4, 1);
+  scene.add(lbl);
+  beamLabels.push({ x: i, sprite: lbl });
+}
+
+// 부러졌을 때의 파편 그룹
+const debrisGroup = new THREE.Group();
+scene.add(debrisGroup);
+
+/* ─────────────────────────────────────────────────────────────
+   6. 복셀 하중물 생성기 (시험추 · 적재블록 · 작업자 · 차량 · 중장비)
+   ───────────────────────────────────────────────────────────── */
+// 표준 시험추 100 kg: 손잡이 달린 강철 추
+function createTestWeight() {
+  const g = new THREE.Group();
+  const steelMat = new THREE.MeshLambertMaterial({ color: 0x57606f });
+  const darkMat = new THREE.MeshLambertMaterial({ color: 0x2f3542 });
+  const labelMat = new THREE.MeshLambertMaterial({ color: 0xf1c40f });
+
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.22, 0.26), steelMat);
+  body.position.y = 0.11; body.castShadow = true;
+  g.add(body);
+
+  const top = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.05, 0.18), darkMat);
+  top.position.y = 0.245; top.castShadow = true;
+  g.add(top);
+
+  // 손잡이
+  const postGeo = new THREE.BoxGeometry(0.04, 0.10, 0.04);
+  const p1 = new THREE.Mesh(postGeo, darkMat); p1.position.set(0.07, 0.32, 0);
+  const p2 = new THREE.Mesh(postGeo, darkMat); p2.position.set(-0.07, 0.32, 0);
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.04, 0.04), darkMat);
+  bar.position.y = 0.38;
+  g.add(p1, p2, bar);
+
+  // 노란 하중 표시 띠
+  const label = new THREE.Mesh(new THREE.BoxGeometry(0.305, 0.05, 0.265), labelMat);
+  label.position.y = 0.11;
+  g.add(label);
+  return g;
+}
+
+// 적재블록 500 kg: 팔레트 위에 쌓인 블록 더미
+function createBlockPallet() {
+  const g = new THREE.Group();
+  const palletMat = new THREE.MeshLambertMaterial({ color: 0xb07d48 });
+  const blockMat = new THREE.MeshLambertMaterial({ color: 0xa5b1c2 });
+  const blockMat2 = new THREE.MeshLambertMaterial({ color: 0x8395a7 });
+
+  const pallet = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.06, 0.40), palletMat);
+  pallet.position.y = 0.03; pallet.castShadow = true;
+  g.add(pallet);
+
+  const bGeo = new THREE.BoxGeometry(0.23, 0.12, 0.18);
+  for (let layer = 0; layer < 3; layer++) {
+    for (let ix = 0; ix < 2; ix++) {
+      for (let iz = 0; iz < 2; iz++) {
+        const b = new THREE.Mesh(bGeo, (layer + ix + iz) % 2 ? blockMat : blockMat2);
+        b.position.set(-0.12 + ix * 0.24, 0.12 + layer * 0.125, -0.095 + iz * 0.19);
+        b.castShadow = true;
+        g.add(b);
+      }
+    }
+  }
+  return g;
+}
+
+// 중장비 5,000 kg: 복셀 굴삭기
+function createVoxelHeavy() {
+  const g = new THREE.Group();
+  const yellowMat = new THREE.MeshLambertMaterial({ color: 0xf6b93b });
+  const darkMat = new THREE.MeshLambertMaterial({ color: 0x2f3542 });
+  const glassMat = new THREE.MeshLambertMaterial({ color: 0xdff9fb });
+
+  // 무한궤도
+  const trackGeo = new THREE.BoxGeometry(0.80, 0.16, 0.14);
+  const t1 = new THREE.Mesh(trackGeo, darkMat); t1.position.set(0, 0.08, 0.20); t1.castShadow = true;
+  const t2 = new THREE.Mesh(trackGeo, darkMat); t2.position.set(0, 0.08, -0.20); t2.castShadow = true;
+  g.add(t1, t2);
+
+  // 상부 차체
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.24, 0.50), yellowMat);
+  body.position.set(-0.04, 0.30, 0); body.castShadow = true;
+  g.add(body);
+
+  // 운전석
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.26, 0.26), glassMat);
+  cab.position.set(0.10, 0.55, 0.10); cab.castShadow = true;
+  g.add(cab);
+
+  // 붐 + 암 + 버킷
+  const boom = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.09, 0.09), yellowMat);
+  boom.position.set(0.40, 0.55, -0.10); boom.rotation.z = 0.45; boom.castShadow = true;
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.36, 0.08), yellowMat);
+  arm.position.set(0.64, 0.50, -0.10); arm.castShadow = true;
+  const bucket = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.12, 0.16), darkMat);
+  bucket.position.set(0.66, 0.28, -0.10); bucket.castShadow = true;
+  g.add(boom, arm, bucket);
+
+  return g;
+}
+
+function createVoxelEngineer() {
+  const charGroup = new THREE.Group();
+  const skinMat = new THREE.MeshLambertMaterial({ color: 0xffdcb4 });
+  const vestMat = new THREE.MeshLambertMaterial({ color: 0xff793f }); // 오렌지 안전조끼
+  const stripeMat = new THREE.MeshLambertMaterial({ color: 0xf5f6fa }); // 반사띠
+  const pantsMat = new THREE.MeshLambertMaterial({ color: 0x227093 }); // 블루 작업복
+  const hatMat = new THREE.MeshLambertMaterial({ color: 0xf1c40f }); // 노란 안전모
+  const eyeMat = new THREE.MeshLambertMaterial({ color: 0x1e272e });
+
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.30, 0.18), vestMat);
+  torso.position.y = 0.26; torso.castShadow = true;
+  charGroup.add(torso);
+
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.265, 0.08, 0.185), stripeMat);
+  stripe.position.y = 0.26;
+  charGroup.add(stripe);
+
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.26, 0.24), skinMat);
+  head.position.y = 0.52; head.castShadow = true;
+  charGroup.add(head);
+
+  // 안전모 챙과 모자
+  const hat = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.12, 0.30), hatMat);
+  hat.position.y = 0.65; hat.castShadow = true;
+  charGroup.add(hat);
+
+  const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.05, 0.02), eyeMat);
+  eyeL.position.set(0.06, 0.54, 0.125);
+  const eyeR = eyeL.clone(); eyeR.position.x = -0.06;
+  charGroup.add(eyeL, eyeR);
+
+  const legL = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.14, 0.13), pantsMat);
+  legL.position.set(0.065, 0.07, 0); legL.castShadow = true;
+  const legR = legL.clone(); legR.position.x = -0.065;
+  charGroup.add(legL, legR);
+
+  charGroup.scale.set(1.15, 1.15, 1.15);
+  return charGroup;
+}
+
+function createVoxelCar() {
+  const carGroup = new THREE.Group();
+  const bodyMat = new THREE.MeshLambertMaterial({ color: 0x3867d6 });
+  const roofMat = new THREE.MeshLambertMaterial({ color: 0xdff9fb });
+  const wheelMat = new THREE.MeshLambertMaterial({ color: 0x1e272e });
+  const lightMat = new THREE.MeshLambertMaterial({ color: 0xf6e58d });
+
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.26, 0.44), bodyMat);
+  body.position.y = 0.20; body.castShadow = true;
+  carGroup.add(body);
+
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.22, 0.40), roofMat);
+  cabin.position.set(-0.04, 0.40, 0); cabin.castShadow = true;
+  carGroup.add(cabin);
+
+  // 전조등
+  const hl = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.06, 0.08), lightMat);
+  hl.position.set(0.36, 0.20, 0.13);
+  const hr = hl.clone(); hr.position.z = -0.13;
+  carGroup.add(hl, hr);
+
+  // 4개 바퀴
+  const wg = new THREE.BoxGeometry(0.15, 0.15, 0.08);
+  const w1 = new THREE.Mesh(wg, wheelMat); w1.position.set(0.22, 0.08, 0.23);
+  const w2 = new THREE.Mesh(wg, wheelMat); w2.position.set(-0.22, 0.08, 0.23);
+  const w3 = new THREE.Mesh(wg, wheelMat); w3.position.set(0.22, 0.08, -0.23);
+  const w4 = new THREE.Mesh(wg, wheelMat); w4.position.set(-0.22, 0.08, -0.23);
+  carGroup.add(w1, w2, w3, w4);
+
+  return carGroup;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   7. 역학 계산 엔진 (Beam Mechanics & Plasticity)
+   - 모멘트:   M(x) = Σ P_i · (x_i − x)        (x < x_i 인 하중만)
+   - 휨응력:   σ(x) = M(x) / S,  S = b·h²/6     (고정단 상단 = 인장 최대)
+   - 탄성 처짐각: θ_e(x) = Σ P_i(x_i·x − x²/2)/EI  (x ≤ x_i),  P_i·x_i²/(2EI) (x > x_i)
+   - 소성:  σ-ε 곡선에서 잔류 소성변형률 ε_p = ε(σ) − σ/E 를 구하고
+            잔류 곡률 κ_p = 2ε_p/h 를 각 위치에 '최대 이력'으로 저장 (하중을 빼도 남음)
+   - 형상:  θ(x) = θ_e(x) + ∫κ_p dx 를 적분해 보의 모양을 만든다
+   ───────────────────────────────────────────────────────────── */
+const G = 9.81;
+const N_INT = 240;                 // 형상 적분 분할 수
+const GROUND_Y = WATER_Y + 0.2;    // 화면에서 보가 내려갈 수 있는 최저 높이 (수면에 닿으면 수면을 따라 눕힘)
+const MAX_PHI = 1.35;              // 화면상 최대 처짐각 (rad)
+
+// 소성 계산 격자는 화면 블록(NUM_SEGS)과 분리해 촘촘하게 (잔류 처짐 수치 오차 < 0.5%)
+const N_PL = 240;
+const plSeg = BEAM_L / N_PL;
+let plasticKappa = new Float64Array(N_PL + 1); // 노드 j (x = j·plSeg) 의 잔류 소성 곡률 κp [1/m]
+let rootPlasticStrain = 0;         // 고정단 상단의 잔류 소성변형률 εp
+let rootStressHist = 0;            // 고정단이 지금까지 겪은 최대 응력 [MPa]
+let rootStrainNow = 0;             // 고정단 상단 현재 변형률
+let wasOverYield = false;
+let failureMode = null;            // 'ductile' | 'brittle'
+let failSnap = null;               // 파괴 순간의 하중 개수/무게/처짐
+let lastStableIds = new Set();     // 마지막으로 '버틴' 계산 때 보 위에 있던 하중 id
+let lastStableX = new Map();       // 그때 각 하중의 위치 (끌어 옮기다 파괴될 때 임계 위치 계산용)
+let lastStableH = null;            // 마지막으로 '버틴' 계산 때의 두께
+let scaleMode = 'auto';            // 'auto' | 숫자
+let visPts = [];                   // 화면용 보 형상 (확대 적용)
+
+function prepMaterial(m) { m.ey = m.fy / m.E; }
+Object.values(MATERIALS).forEach(prepMaterial);
+
+// σ-ε 곡선 (재하 경로). 차트와 소성 계산이 같은 곡선을 쓴다.
+function stressAtStrain(m, e) {
+  if (e <= 0) return 0;
+  if (e <= m.ey) return m.E * e;
+  if (m.isRubber) {
+    if (e <= m.eu) return m.fy + (m.fu - m.fy) * Math.pow((e - m.ey) / (m.eu - m.ey), 1.6);
+    return 0;
+  }
+  if (m.ductile) {
+    if (e <= m.eu) return m.fy + (m.fu - m.fy) * Math.sqrt((e - m.ey) / (m.eu - m.ey));
+    if (e <= m.ef) return m.fu - (m.fu - 0.85 * m.fy) * Math.pow((e - m.eu) / (m.ef - m.eu), 1.5);
+    return 0;
+  }
+  if (e <= m.eu) return m.fy + (m.fu - m.fy) * Math.pow((e - m.ey) / (m.eu - m.ey), 0.7);
+  return 0;
+}
+
+// 재하 곡선의 역함수 (상승 구간에서 이분법)
+function strainAtStress(m, s) {
+  if (s <= 0) return 0;
+  if (s <= m.fy) return s / m.E;
+  if (s >= m.fu) return m.eu;
+  let lo = m.ey, hi = m.eu;
+  for (let k = 0; k < 60; k++) {
+    const mid = (lo + hi) / 2;
+    if (stressAtStrain(m, mid) < s) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+// 응력 s 까지 갔다가 하중을 제거했을 때 남는 소성변형률
+function plasticStrainAt(m, s) {
+  if (!m.ductile || m.isRubber || s <= m.fy) return 0;
+  const sc = Math.min(s, m.fu);
+  return Math.max(0, strainAtStress(m, sc) - sc / m.E);
+}
+
+function loadsOnBeam() { return characters.filter(c => c.onBeam); }
+
+function momentAt(x, loads) {            // N·m
+  let M = 0;
+  loads.forEach(c => { if (c.xPos > x) M += c.weight * G * (c.xPos - x); });
+  return M;
+}
+
+function elasticSlopeAt(x, loads, EI) {  // rad
+  let t = 0;
+  loads.forEach(c => {
+    const P = c.weight * G, a = c.xPos;
+    t += (x <= a) ? P * (a * x - x * x / 2) / EI : P * a * a / (2 * EI);
+  });
+  return t;
+}
+
+// 잔류 소성 곡률을 적분한 소성 처짐각 θp(x)
+function plasticThetaNodes() {
+  const th = new Float64Array(N_PL + 1);
+  for (let j = 1; j <= N_PL; j++) {
+    th[j] = th[j - 1] + 0.5 * (plasticKappa[j - 1] + plasticKappa[j]) * plSeg;
+  }
+  return th;
+}
+function interpNodes(arr, x) {
+  const f = Math.max(0, Math.min(N_PL - 1e-9, x / plSeg));
+  const j = Math.floor(f), t = f - j;
+  return arr[j] + (arr[j + 1] - arr[j]) * t;
+}
+
+// 형상 적분
+//  - 'real': 소변형 보 이론 그대로 y = −∫θ dx (각도 상한/바닥 없음) → 표의 '실제' 처짐값
+//  - 'vis' : 화면용. 회전각 k·θ 로 길이를 보존하며 그리고, 너무 큰 각은 제한, 바닥에 닿으면 바닥을 따라 눕힘
+function buildShape(k, loads, EI, mode) {
+  const ds = BEAM_L / N_INT;
+  const thP = plasticThetaNodes();
+  const pts = [{ x: 0, y: 0, phi: 0, s: 0 }];
+  let x = 0, y = 0;
+  for (let i = 0; i < N_INT; i++) {
+    const sm = (i + 0.5) * ds;
+    const th = (loads ? elasticSlopeAt(sm, loads, EI) : 0) + interpNodes(thP, sm);
+    if (mode === 'real') {
+      x += ds;
+      y -= ds * th;
+      pts.push({ x, y, phi: th, s: (i + 1) * ds });
+      continue;
+    }
+    const phi = Math.max(-MAX_PHI, Math.min(MAX_PHI, k * th));
+    let nx = x + ds * Math.cos(phi), ny = y - ds * Math.sin(phi);
+    if (ny < GROUND_Y) {
+      // 바닥과 만나는 교점까지는 원래 방향, 나머지 길이는 바닥을 따라 수평으로 → 교점을 별도 점으로 넣어 길이 보존
+      const t = y > GROUND_Y ? (y - GROUND_Y) / (y - ny) : 0;
+      if (t > 1e-6) {
+        x += t * ds * Math.cos(phi); y = GROUND_Y;
+        pts.push({ x, y, phi, s: i * ds + t * ds });
+      }
+      nx = x + (1 - t) * ds;
+      ny = GROUND_Y;
+    }
+    x = nx; y = ny;
+    pts.push({ x, y, phi, s: (i + 1) * ds });
+  }
+  return pts;
+}
+function samplePts(pts, s) {
+  // 길이좌표 s 로 이분 탐색 (바닥 교점 등으로 점 간격이 균일하지 않을 수 있음)
+  const n = pts.length - 1;
+  s = Math.max(0, Math.min(pts[n].s, s));
+  let lo = 0, hi = n;
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (pts[mid].s <= s) lo = mid; else hi = mid; }
+  const a = pts[lo], b = pts[hi];
+  const t = b.s > a.s ? (s - a.s) / (b.s - a.s) : 0;
+  return {
+    x: a.x + (b.x - a.x) * t,
+    y: a.y + (b.y - a.y) * t,
+    phi: Math.atan2(-(b.y - a.y), b.x - a.x)
+  };
+}
+
+// 자동 배율: 재료별로 '파괴 직전까지 화면 안에서 휨이 보이는' 고정 배율 (하중에 따라 바뀌지 않게)
+const AUTO_SCALE = { mild_steel: 10, high_steel: 10, concrete: 50, wood: 5, rubber: 1 };
+function getDisplayScale() {
+  if (scaleMode === 'auto') return AUTO_SCALE[currentMatKey] || 10;
+  return Number(scaleMode);
+}
+
+// 재료별 한계 용어 (강재: 항복 / 콘크리트: 균열 / 목재: 비례한도 / 고무: 선형한계)
+const LIMIT_TERMS = {
+  mild_steel: { sym: 'σ_y', word: '항복', M: 'M_y', Mword: '항복모멘트' },
+  high_steel: { sym: 'σ_y', word: '항복', M: 'M_y', Mword: '항복모멘트' },
+  concrete:   { sym: 'σ_cr', word: '균열', M: 'M_cr', Mword: '균열모멘트' },
+  wood:       { sym: 'σ_pl', word: '비례한도', M: 'M_pl', Mword: '비례한도 모멘트' },
+  rubber:     { sym: 'σ_el', word: '선형한계', M: 'M_el', Mword: '선형한계 모멘트' }
+};
+function terms() { return LIMIT_TERMS[currentMatKey] || LIMIT_TERMS.mild_steel; }
+
+let linearLimitExceeded = false;   // 처짐 > L/10 → 소변형 이론 오차 큼
+
+// 단면 임계 재구성 때 전역 단면값을 잠시 바꾸므로, 어떤 경우에도(예외 포함) 원래 값으로 복원되게 감싼다
+function calculateBeamPhysics() {
+  const saved = { H: BEAM_H, I: BEAM_I, S: BEAM_S };
+  let ok = false;
+  try {
+    calculateBeamPhysicsInner();
+    ok = true;
+  } finally {
+    BEAM_H = saved.H; BEAM_I = saved.I; BEAM_S = saved.S;
+    // 예외로 중단되면 임계 두께로 바꿔 둔 보 외형도 현재 두께로 되돌린다 (정상 파괴 시에는 임계 외형 유지)
+    if (!ok) {
+      beamSegments.forEach(seg => { seg.scale.y = BEAM_H / BEAM_H0; });
+      bracket.scale.y = BEAM_H / BEAM_H0;
+    }
+  }
+}
+
+function calculateBeamPhysicsInner() {
+  if (isBroken) return;
+  const m = currentMat;
+  let loads = loadsOnBeam();
+  let EI = m.E * 1e6 * BEAM_I;
+
+  const M0in = momentAt(0, loads);
+  const sigmaIn = M0in / BEAM_S / 1e6;   // 투입된 하중 전체에 대한 환산응력 [MPa]
+  const failing = sigmaIn >= m.fu;       // 극한강도 도달 → 이번 계산 끝에 파괴
+  // 파괴 시 '임계 순간'을 재구성한다.
+  //  - 순차 재하(보통의 경우): 직전까지 버티던 하중은 그대로, 이번에 새로 올린 하중만 비율 α 로 키워 σ = σ_u 가 되는 순간
+  //  - 올려둔 하중을 끌어 옮기다 파괴: 나머지는 그대로, 옮기던 하중이 x_cr = (M_u − M_나머지)/P 에 왔을 때
+  //  - 그 밖의 경우: 모든 하중을 같은 비율 λ 로 (비례재하)
+  let critInfo = null;
+  let sectionRestore = null;
+  if (failing) {
+    const Mu = m.fu * 1e6 * BEAM_S;
+    const added = loads.filter(c => !lastStableIds.has(c.id));
+    const kept = loads.filter(c => lastStableIds.has(c.id));
+    const Mkept = momentAt(0, kept), Madded = momentAt(0, added);
+    const hCr = Math.sqrt(6 * M0in / (BEAM_B * m.fu * 1e6));   // 이 하중에서 σ = σ_u 가 되는 두께
+    const movedList = kept.filter(c => lastStableX.has(c.id) && Math.abs(lastStableX.get(c.id) - c.xPos) > 1e-9);
+    const mv = (!added.length && movedList.length === 1) ? movedList[0] : null;
+    const Mrest = mv ? momentAt(0, loads.filter(c => c !== mv)) : 0;
+    if (!added.length && lastStableH !== null && lastStableH > BEAM_H && hCr <= lastStableH + 1e-12) {
+      // 단면 감소에 의한 파괴: 하중은 그대로, 두께가 h_cr 까지 얇아진 순간을 재구성 (계산 동안만 단면을 h_cr 로)
+      sectionRestore = { H: BEAM_H, I: BEAM_I, S: BEAM_S };
+      BEAM_H = hCr;
+      BEAM_I = BEAM_B * Math.pow(hCr, 3) / 12;
+      BEAM_S = BEAM_B * Math.pow(hCr, 2) / 6;
+      EI = m.E * 1e6 * BEAM_I;
+      const sy = hCr / BEAM_H0;                      // 보 블록 외형도 임계 두께로
+      beamSegments.forEach(seg => { seg.scale.y = sy; });
+      bracket.scale.y = sy;
+      loads = loads.map(c => Object.assign({}, c, { frac: 1 }));
+      critInfo = { mode: 'section', alpha: 1, added: [], hCr, hFinal: sectionRestore.H };
+    } else if (added.length && Madded > 0 && Mkept < Mu) {
+      const alpha = (Mu - Mkept) / Madded;
+      loads = kept.map(c => Object.assign({}, c, { frac: 1 })).concat(
+        added.map(c => Object.assign({}, c, { weight: c.weight * alpha, orig: c.weight, frac: alpha })));
+      critInfo = { mode: 'increment', alpha, added: added.map(c => c.type) };
+    } else if (mv && Mrest < Mu && mv.xPos > lastStableX.get(mv.id)) {
+      const x0 = lastStableX.get(mv.id), xTo = mv.xPos;
+      const xCr = Math.min(xTo, Math.max(x0, (Mu - Mrest) / (mv.weight * G)));
+      mv.xPos = xCr;                                  // 하중물도 파괴 순간의 위치에 멈춘다
+      loads = loads.map(c => Object.assign({}, c, { frac: 1 }));
+      critInfo = { mode: 'move', alpha: 1, added: [mv.type], xCr, x0, xTo };
+    } else {
+      const lambda = Mu / M0in;
+      loads = loads.map(c => Object.assign({}, c, { weight: c.weight * lambda, orig: c.weight, frac: lambda }));
+      critInfo = { mode: 'proportional', alpha: lambda, added: [] };
+    }
+  }
+  const M0 = momentAt(0, loads);
+  const sigma0 = M0 / BEAM_S / 1e6;
+  currentMaxMoment = M0 / 1000;      // kN·m
+  currentMaxStress = sigma0;
+
+  // 1) 소성 이력 갱신 (지금까지 겪은 최대값만 남김 → 같은 상태에서 몇 번 계산해도 동일)
+  //    연성 파괴 시에는 ε_u 까지 소성된 최종 형상을 만든 뒤 끊어진다
+  if (m.ductile && !m.isRubber) {
+    for (let j = 0; j <= N_PL; j++) {
+      const sj = momentAt(j * plSeg, loads) / BEAM_S / 1e6;
+      const kp = 2 * plasticStrainAt(m, sj) / BEAM_H;
+      if (kp > plasticKappa[j]) plasticKappa[j] = kp;
+    }
+    rootPlasticStrain = Math.max(rootPlasticStrain, plasticStrainAt(m, sigma0));
+  }
+  rootStressHist = Math.max(rootStressHist, Math.min(sigma0, m.fu));
+
+  // 2) 고정단 현재 변형률 (소성 이력이 있으면 기울기 E로 재재하)
+  if (failing) {
+    rootStrainNow = m.eu;
+  } else if (rootPlasticStrain > 0 && sigma0 <= rootStressHist) {
+    rootStrainNow = rootPlasticStrain + sigma0 / m.E;
+  } else {
+    rootStrainNow = strainAtStress(m, sigma0);
+  }
+
+  // 3) 형상: 표의 수치는 소변형 보 이론 그대로(real), 화면은 확대 배율 적용(vis)
+  const realPts = buildShape(1, loads, EI, 'real');
+  const permPts = buildShape(1, null, EI, 'real');
+  currentDeflection = -realPts[realPts.length - 1].y * 100;          // cm
+  currentPermanent = -permPts[permPts.length - 1].y * 100;           // cm
+  linearLimitExceeded = currentDeflection > BEAM_L * 100 * 0.1;
+  visPts = buildShape(getDisplayScale(), loads, EI, 'vis');
+
+  // 4) 세그먼트 배치 + 응력 히트맵
+  const baseC = new THREE.Color(m.color), baseTop = new THREE.Color(m.topColor);
+  const hotC = new THREE.Color(0xff4757), scarC = new THREE.Color(0xffa502);
+  for (let i = 0; i < NUM_SEGS; i++) {
+    const a = samplePts(visPts, i * segLength), b = samplePts(visPts, (i + 1) * segLength);
+    const seg = beamSegments[i];
+    seg.position.set((a.x + b.x) / 2, (a.y + b.y) / 2, 0);
+    seg.rotation.z = Math.atan2(b.y - a.y, b.x - a.x);
+
+    const xc = (i + 0.5) * segLength;
+    const ratio = (momentAt(xc, loads) / BEAM_S / 1e6) / m.fy;
+    const scar = interpNodes(plasticKappa, i * segLength) > 1e-9;   // 블록 왼쪽 끝(모멘트 큰 쪽)에 소성 흔적이 있으면
+    const side = seg.material[0], top = seg.material[2];
+    if (ratio >= 1.0) {
+      side.color.copy(hotC); top.color.setHex(0xff6b81);
+    } else if (ratio > 0.45) {
+      const t = (ratio - 0.45) / 0.55;
+      side.color.copy(baseC).lerp(hotC, t);
+      top.color.copy(baseTop).lerp(hotC, t);
+    } else {
+      side.color.copy(baseC);
+      top.color.copy(baseTop);
+    }
+    // 소성 흔적: 하중을 빼도 윗면에 주황색 띠로 남는다
+    if (scar && ratio < 1.0) top.color.lerp(scarC, 0.75);
+    seg.userData.scar.visible = scar && ratio < 1.0;
+  }
+
+  // 5) 하중물을 변형된 보 윗면에 올리기 + 거리 라벨 이동
+  placeLoadsOnBeam();
+  beamLabels.forEach(l => {
+    const p = samplePts(visPts, l.x - 0.001);
+    l.sprite.position.set(p.x, p.y - BEAM_H / 2 - 0.28, BEAM_B / 2 + 0.25);
+  });
+
+  // 6) 파괴: 최종 형상·하중 위치를 스냅샷으로 남긴 뒤 붕괴 연출
+  if (failing) {
+    const real = loadsOnBeam();
+    failSnap = {
+      count: real.length,
+      weight: real.reduce((a, c) => a + c.weight, 0),            // 실제로 투입한 무게
+      critWeight: loads.reduce((a, c) => a + c.weight, 0),       // 임계 순간의 등가 무게
+      defl: currentDeflection,
+      crit: critInfo,
+      Min: (critInfo && critInfo.mode === 'move') ? M0 / 1000 : M0in / 1000,   // 옮기다 파괴되면 실제로도 x_cr 에서 멈춤
+      H: BEAM_H, S: BEAM_S,                                      // 임계 순간의 단면 (BMD 한계선 등에 사용)
+      // 표·BMD·하중목록 모두 '임계 순간' 하중으로 통일 → M = ΣP·x 가 항상 성립
+      loads: loads.map(c => ({ id: c.id, type: c.type, weight: c.weight, xPos: c.xPos, orig: c.orig || c.weight, frac: c.frac || 1 }))
+    };
+    triggerFailure((m.brittle || m.isRubber) ? 'brittle' : 'ductile');
+    return;
+  }
+
+  lastStableIds = new Set(loadsOnBeam().map(c => c.id));
+  lastStableX = new Map(loadsOnBeam().map(c => [c.id, c.xPos]));
+  lastStableH = BEAM_H;
+
+  // 7) 상태 전환 알림 (전환 순간에만 소리/토스트)
+  const over = sigma0 > m.fy;
+  if (over && !wasOverYield) {
+    if (m.brittle) {
+      playSound('plastic');
+      showToast(`⚠️ ${terms().word} 단계 초과! 취성 재료는 곧 예고 없이 깨집니다.`, 'danger');
+    } else if (m.isRubber) {
+      showToast('🟡 고무: 크게 휘지만 아직 탄성입니다 (하중을 빼면 복원).', 'normal');
+    } else {
+      playSound('plastic');
+      showToast('⚠️ 항복! 이제부터 생기는 변형은 하중을 빼도 남습니다 (소성).', 'warning');
+    }
+  }
+  wasOverYield = over;
+
+  updateHUD();
+  checkMissions();
+}
+
+function placeLoadsOnBeam() {
+  characters.forEach(c => {
+    if (!c.onBeam) return;
+    const p = samplePts(visPts, c.xPos);
+    const sn = Math.sin(p.phi), cs = Math.cos(p.phi);
+    c.baseX = p.x + sn * BEAM_H / 2;
+    c.baseY = p.y + cs * BEAM_H / 2;
+    c.mesh.position.set(c.baseX, c.baseY, c.zOffset || 0);
+    c.mesh.rotation.z = -Math.min(p.phi, 0.45);   // 너무 가파르면 옆으로 눕지 않게 기울기 제한
+  });
+}
+
+/* ─────────────────────────────────────────────────────────────
+   8. 파괴 연출: 연성(크게 휜 뒤 끊어짐) vs 취성(예고 없이 산산조각)
+   ───────────────────────────────────────────────────────────── */
+function triggerFailure(mode) {
+  if (isBroken) return;
+  isBroken = true;
+  failureMode = mode;
+  playSound('snap');
+  beamGroup.visible = false;
+  beamLabels.forEach(l => { l.sprite.visible = false; });
+  hidePreview();
+
+  // 파괴는 모멘트가 가장 큰 고정단에서 시작된다.
+  // 연성: 고정단에서 끊어진 보가 한 덩어리로 떨어짐 / 취성: 고정단 부근이 산산조각 나고 나머지가 통째로 추락
+  const crackLen = mode === 'brittle' ? Math.round(0.9 / segLength) : 0;   // 고정단 부근 약 0.9 m 가 산산조각
+  for (let i = 0; i < NUM_SEGS; i++) {
+    const seg = beamSegments[i];
+    const debris = new THREE.Mesh(
+      new THREE.BoxGeometry(segLength * (i < crackLen ? 0.85 : 0.99), BEAM_H * 0.95, BEAM_B * 0.95),
+      seg.material[0].clone()
+    );
+    debris.position.copy(seg.position);
+    debris.rotation.copy(seg.rotation);
+    debris.castShadow = true;
+    const r = (i + 0.5) * segLength;
+    if (i < crackLen) {
+      debris.userData = {
+        vx: (Math.random() * 0.8 + 0.15) * 2.5, vy: Math.random() * 2.5 + 1, vz: (Math.random() - 0.5) * 3,   // 호수 쪽으로 튐
+        rx: Math.random() * 0.25, ry: Math.random() * 0.25, rz: Math.random() * 0.25
+      };
+    } else {
+      // 한 덩어리처럼: 끝으로 갈수록 빨리 떨어져 고정단 쪽을 축으로 꺾이듯 낙하
+      debris.userData = { vx: 0.5, vy: 0.4 - r * 0.32, vz: 0, rx: 0, ry: 0, rz: -0.01 };
+    }
+    debrisGroup.add(debris);
+  }
+  // 고정단 균열 지점 먼지
+  for (let k = 0; k < 3; k++) emitPuff(0.1, 0, (k - 1) * 0.1);
+
+  characters.forEach(c => {
+    c.onBeam = false;
+    c.vx = (Math.random() * 0.8 + 0.1) * (mode === 'ductile' ? 1.2 : 4);   // 호수 쪽으로
+    c.vy = Math.random() * (mode === 'ductile' ? 1 : 4) + (mode === 'ductile' ? 0.5 : 3);
+    c.vz = (Math.random() - 0.5) * 3;
+    c.rx = Math.random() * 0.15;
+    c.rz = Math.random() * 0.15;
+  });
+
+  if (currentMat.isRubber) {
+    showToast('💥 극한강도 도달! 고무는 소성 없이 탄성으로 늘어나다가 한 번에 찢어져 호수로 떨어졌습니다 (초탄성 파단).', 'danger');
+  } else if (mode === 'ductile') {
+    showToast('💥 극한강도 초과! 크게 휘어진 뒤 고정단에서 끊어져 호수로 떨어졌습니다 (연성 파괴).', 'danger');
+  } else {
+    showToast('💥 예고 없이 한 번에 깨져 호수로 떨어졌습니다! (취성 파괴)', 'danger');
+  }
+  updateHUD();
+  checkMissions();
+}
+
+/* ─────────────────────────────────────────────────────────────
+   9. HUD · σ-ε 선도 · 휨모멘트도 · 하중 목록
+   ───────────────────────────────────────────────────────────── */
+let currentPermanent = 0;
+
+function fmtStrain(e) {
+  if (e === 0) return '0';
+  return e < 0.01 ? e.toFixed(5) : e.toFixed(3);
+}
+
+function updateHUD() {
+  const onBeam = loadsOnBeam();
+  const m = currentMat;
+  const snap = isBroken && failSnap;
+  const count = snap ? failSnap.count : onBeam.length;
+  const totalWeight = snap ? failSnap.weight : onBeam.reduce((sum, c) => sum + c.weight, 0);
+  const fmtKg = w => (Math.round(w * 10) / 10).toLocaleString();
+
+  document.getElementById('valPeople').textContent = snap
+    ? `${count} 개 (임계 ${fmtKg(failSnap.critWeight)} kg)`
+    : `${count} 개 (${totalWeight.toLocaleString()} kg)`;
+  const crit = document.getElementById('critNote');
+  if (crit) {
+    if (snap && failSnap.crit) {
+      const c = failSnap.crit;
+      const pct = (c.alpha * 100).toFixed(0);
+      const who = c.mode === 'increment'
+        ? `마지막에 올린 ${c.added.map(t => LOAD_TYPES[t].name).join('·')}의 ${pct}%가 실렸을 때`
+        : c.mode === 'section'
+          ? `하중은 그대로 두고 두께가 ${(c.hCr * 100).toFixed(1)} cm까지 얇아졌을 때 (최종 ${(c.hFinal * 100).toFixed(0)} cm)`
+          : c.mode === 'move'
+            ? `${LOAD_TYPES[c.added[0]].name}를 x = ${c.x0.toFixed(2)} m에서 끌어 옮기다가 x = ${c.xCr.toFixed(2)} m에 왔을 때`
+            : `모든 하중이 ${pct}%일 때`;
+      crit.style.display = 'block';
+      crit.textContent = `💥 ${who} σ = σ_u 도달 → σ-ε 선도·BMD·역학 상태와 하중 목록은 모두 그 '임계 순간' 값입니다. ` +
+        `(실제로 올린 하중: ${count}개 ${totalWeight.toLocaleString()} kg, M = ${failSnap.Min.toFixed(1)} kN·m)`;
+    } else {
+      crit.style.display = 'none';
+    }
+  }
+  document.getElementById('lblYield').textContent = m.limitName || '재료 항복강도 σ_y';
+  const md = document.getElementById('matDesc');
+  if (md) md.textContent = m.description;
+  document.getElementById('valMoment').textContent = `${currentMaxMoment.toFixed(1)} kN·m`;
+  document.getElementById('valStress').textContent = `${currentMaxStress.toFixed(1)} MPa`;
+  document.getElementById('valYield').textContent = `${m.fy} MPa`;
+  document.getElementById('valStrain').textContent = fmtStrain(rootStrainNow);
+  const dEl = document.getElementById('valDeflection');
+  dEl.textContent = `${currentDeflection.toFixed(1)} cm` + (linearLimitExceeded ? ' ⚠' : '');
+  dEl.title = linearLimitExceeded ? '처짐이 보 길이의 10%를 넘어 소변형 보 이론의 오차가 큽니다 (대략적인 값).' : '';
+  document.getElementById('gaugeTitle').textContent = `응력 게이지 (σ_max / ${terms().sym})`;
+  document.getElementById('linWarn').style.display = (linearLimitExceeded && !isBroken) ? 'block' : 'none';
+  document.getElementById('valPermanent').textContent = `${currentPermanent.toFixed(1)} cm`;
+
+  // 단면계수 (파괴 후에는 임계 순간의 단면)
+  const Snow = (snap && failSnap.S) ? failSnap.S : BEAM_S;
+  const sEl = document.getElementById('valS');
+  if (sEl) sEl.textContent = `${Math.round(Snow * 1e6).toLocaleString()} cm³`;
+  document.querySelectorAll('.mat-btn').forEach(b => { b.title = MATERIALS[b.dataset.mat].description; });
+
+  // 응력 게이지
+  const stressRatio = Math.round((currentMaxStress / (m.fy || 1)) * 100);
+  const barFill = document.getElementById('stressBarFill');
+  const barText = document.getElementById('stressBarText');
+  if (isBroken) {
+    barFill.style.width = '100%';
+    barFill.style.backgroundColor = '#2f3542';
+    barText.style.color = '#ffffff';
+    barText.textContent = '💥 파괴 (Failed)';
+  } else {
+    barText.style.color = '';
+    barFill.style.width = Math.min(100, (stressRatio / 150) * 100) + '%';
+    if (stressRatio >= 100) {
+      barFill.style.backgroundColor = '#ff4757';
+      barText.textContent = m.brittle ? `${stressRatio}% (${terms().word} 초과! 파괴 임박)` : (m.isRubber ? `${stressRatio}% (선형한계 초과, 여전히 탄성)` : `${stressRatio}% (소성 변형 진행!)`);
+    } else if (stressRatio >= 80) {
+      barFill.style.backgroundColor = '#ffa502';
+      barText.textContent = `${stressRatio}% (${terms().word} 임박!)`;
+    } else {
+      barFill.style.backgroundColor = '#2ed573';
+      barText.textContent = `${stressRatio}% (탄성 안전)`;
+    }
+  }
+
+  // 상태 배지
+  const badge = document.getElementById('statusBadge');
+  const rowPlastic = document.getElementById('rowPlastic');
+  const hasResidual = currentPermanent > 0.05;
+  if (isBroken) {
+    badge.className = 'status-badge broken';
+    badge.textContent = m.isRubber ? '💥 초탄성 파단 (극한강도 도달)' : failureMode === 'ductile' ? '💥 연성 파괴 (크게 휜 뒤 파단)' : '💥 취성 파괴 (예고 없이 붕괴)';
+    const c = failSnap && failSnap.crit;
+    if (c && c.mode === 'increment' && c.alpha < 0.999) badge.textContent += ` · ${LOAD_TYPES[c.added[0]].name} ${(c.alpha * 100).toFixed(0)}%에서`;
+    else if (c && c.mode === 'section') badge.textContent += ` · h=${(c.hCr * 100).toFixed(1)}cm에서`;
+    else if (c && c.mode === 'move') badge.textContent += ` · ${LOAD_TYPES[c.added[0]].name} x=${c.xCr.toFixed(2)}m에서`;
+    else if (c && c.mode === 'proportional' && c.alpha < 0.999) badge.textContent += ` · 하중 ${(c.alpha * 100).toFixed(0)}%에서`;
+  } else if (currentMaxStress > m.fy) {
+    if (m.brittle) {
+      badge.className = 'status-badge danger';
+      badge.textContent = currentMatKey === 'concrete' ? '⚠️ 인장 균열 발생 · 파괴 직전' : `⚠️ ${terms().word} 초과 · 취성 파괴 직전`;
+    } else if (m.isRubber) {
+      badge.className = 'status-badge plastic';
+      badge.textContent = '🟡 대변형 (고무는 여전히 탄성)';
+    } else {
+      badge.className = 'status-badge plastic';
+      badge.textContent = '⚠️ 소성 변형 중 (영구 처짐 발생!)';
+    }
+  } else if (hasResidual) {
+    badge.className = 'status-badge residual';
+    badge.textContent = '🟠 탄성 범위 · 영구 처짐은 남아 있음';
+  } else {
+    badge.className = 'status-badge elastic';
+    badge.textContent = '✅ 안전 (탄성 영역 · 100% 복원)';
+  }
+  rowPlastic.classList.toggle('highlight', hasResidual || (m.ductile && !m.isRubber && (isBroken || currentMaxStress > m.fy)));
+
+  // 화면 확대 배지
+  const k = getDisplayScale();
+  const sb = document.getElementById('scaleBadge');
+  if (sb) {
+    const auto = scaleMode === 'auto' ? '자동 ' : '';
+    sb.textContent = (k === 1 ? `화면 휨: ${auto}실제 비율 ×1` : `화면 휨 ${auto}×${k} 확대 · 표는 실제값`) +
+      (linearLimitExceeded ? ' · 큰 변형은 근사' : '');
+  }
+
+  drawCurveChart();
+  drawBMD();
+  renderLoadList();
+  updateCommentary();
+  if (typeof updateConceptLive === 'function') updateConceptLive();
+  updateStatTiles();
+}
+
+/* 번외: 핵심 수치 타일 (M · σ/σ_y · δ) — 표를 스크롤하지 않아도 한눈에 */
+function updateStatTiles() {
+  const tM = document.getElementById('tileM');
+  if (!tM) return;
+  const m = currentMat, T = terms();
+  const Ssec = (isBroken && failSnap && failSnap.S) ? failSnap.S : BEAM_S;
+  const Mu = m.fu * 1e6 * Ssec / 1000;
+  const ratio = currentMaxStress / (m.fy || 1);
+  const cls = isBroken ? 'danger' : ratio > 1 ? (m.brittle ? 'danger' : 'warn') : ratio >= 0.8 ? 'warn' : 'ok';
+  const set = (id, v, w, c) => { const t = document.getElementById(id); t.className = 'stat-tile ' + c; t.querySelector('b').firstChild.nodeValue = v; t.querySelector('.bar i').style.width = Math.max(0, Math.min(100, w)) + '%'; };
+  document.querySelector('#tileM small').textContent = isBroken ? '임계 M = M_u' : `M (M_u ${Mu.toFixed(0)})`;
+  document.querySelector('#tileS small').textContent = `σ / ${T.sym} ${m.fy}`;
+  set('tileM', currentMaxMoment.toFixed(1), currentMaxMoment / Mu * 100, cls);
+  set('tileS', Math.round(ratio * 100), ratio * 100, cls);   // 막대 분모도 숫자와 같은 σ_y (review_17 P1)
+  set('tileD', currentDeflection.toFixed(1), Math.min(100, currentDeflection / (BEAM_L * 100 * 0.1) * 100), linearLimitExceeded ? 'warn' : cls);
+}
+
+/* 실시간 대사: 지금 상태를 안전모 캐릭터가 한 줄로 설명 */
+function updateCommentary() {
+  const p = document.getElementById('commentaryText');
+  const av = document.getElementById('commentaryAvatar');
+  if (!p) return;
+  const m = currentMat, T = terms();
+  const n = loadsOnBeam().length;
+  const ratio = currentMaxStress / (m.fy || 1);
+  const pct = Math.round(ratio * 100);
+  let txt, cls = '', face = '👷';
+  if (isBroken) {
+    face = '😱';
+    cls = 'danger';
+    const c = failSnap && failSnap.crit;
+    const Mu = currentMaxMoment;   // 파괴 후 currentMaxMoment = 재구성된 임계 순간의 M (= M_u)
+    if (m.isRubber) txt = `찢어졌어요! 고무는 소성이 없어서 선형한계를 넘어도 탄성으로 늘어나다가, 극한강도 σ_u 에서 한 번에 끊어져요 (취성·연성 분류와는 다른 초탄성 파단). 임계 M = ${Mu.toFixed(1)} kN·m. [🔄 시편 교체]로 새 보를 받으세요.`;
+    else if (failureMode === 'ductile') txt = `부러졌어요! 크게 휘면서 버티다가 끝내 끊어진 연성 파괴예요. 임계 순간 M = ${Mu.toFixed(1)} kN·m 로 σ 가 극한강도 σ_u 에 닿았어요. [🔄 시편 교체]로 새 보를 받으세요.`;
+    else txt = `쩍! 예고 없이 깨진 취성 파괴예요. ${m.name}은(는) 소성 변형 없이 ${T.word} 한계(${T.sym})를 조금만 넘어도 바로 부서져요. 임계 M = ${Mu.toFixed(1)} kN·m. [🔄 시편 교체]로 새 보를 받으세요.`;
+    if (c && c.mode === 'move') txt = `끌어 옮기다가 x = ${c.xCr.toFixed(2)} m 에서 부러졌어요! 같은 무게도 벽에서 멀어질수록 M = P·x 가 커지니까요. [🔄 시편 교체]로 새 보를 받으세요.`;
+  } else if (n === 0) {
+    if (currentPermanent > 0.05) {
+      face = '🤔'; cls = 'warn';
+      txt = `하중은 다 뺐는데 δ_p = ${currentPermanent.toFixed(1)} cm 가 남았어요. 항복을 넘었던 부분이 돌아오지 않는 소성 변형이에요. (주황 띠 = 소성이 일어난 구간)`;
+    } else {
+      face = '👷'; cls = 'info';
+      txt = `지금 보는 ${m.name}, 두께 ${Math.round(BEAM_H * 100)} cm 예요. ${m.description} 아래 도크에서 하중물을 끌어 올려 보세요!`;
+    }
+  } else if (m.isRubber) {
+    face = ratio > 1 ? '😮' : '🙂'; cls = ratio > 1 ? 'warn' : 'good';
+    txt = ratio > 1
+      ? `처짐이 ${currentDeflection.toFixed(0)} cm! 선형 한계는 넘었지만 고무는 소성이 없어서 하중을 빼면 완전히 돌아와요. 직접 빼서 확인해 보세요.`
+      : `고무는 탄성계수 E 가 아주 작아서 ${currentDeflection.toFixed(1)} cm 나 휘어요. 그래도 탄성이라 하중을 빼면 100% 복원돼요.`;
+  } else if (ratio > 1) {
+    if (m.brittle) {
+      face = '😨'; cls = 'danger';
+      txt = `${T.word} 한계 ${T.sym} 를 넘었어요 (${pct}%)! ${m.name}은(는) 소성 변형 없이 극한강도(${m.fu} MPa)에서 바로 깨지니까 파괴가 임박했어요. 조금만 더 올리면 부러져요.`;
+    } else {
+      face = '😬'; cls = 'warn';
+      txt = `항복강도의 ${pct}%! σ-ε 선도의 점이 꺾인 구간에 들어갔죠? 지금 하중을 빼도 영구 처짐 δ_p = ${currentPermanent.toFixed(1)} cm 가 남아요. 극한강도까지는 ${Math.max(0, Math.round((1 - currentMaxStress / m.fu) * 100))}% 남았어요.`;
+    }
+  } else if (ratio >= 0.8) {
+    face = '😰'; cls = 'warn';
+    txt = `σ 가 ${T.word} 한계의 ${pct}%예요. 아직 탄성이지만 하중을 조금만 더 올리거나 끝단 쪽으로 옮기면 ${m.brittle ? '깨져요' : '항복해요'}. M = ${currentMaxMoment.toFixed(1)} kN·m ÷ S = ${currentMaxStress.toFixed(1)} MPa.`;
+  } else if (ratio >= 0.4) {
+    face = '🙂'; cls = 'good';
+    txt = `${T.word} 한계의 ${pct}%, 탄성 범위예요. 지금 빼면 100% 돌아와요. 같은 하중물을 끝단 쪽으로 끌면 M = P·x 가 커져 σ 도 같이 커져요.`;
+  } else {
+    face = '😎'; cls = 'good';
+    txt = `${T.word} 한계의 ${pct}%뿐이라 여유가 많아요. 처짐 ${currentDeflection.toFixed(1)} cm 는 화면에서 확대해 보여주는 거예요. 더 무거운 하중물을 올려 볼까요?`;
+  }
+  if (!isBroken && linearLimitExceeded) txt += ' (처짐이 커서 표의 값은 근사예요.)';
+  if (p.textContent !== txt) { p.textContent = txt; p.classList.remove('pop'); }
+  p.className = cls;
+  if (av) av.textContent = face;
+}
+
+/* σ-ε 선도: 탄성 구간이 보이도록 가로축을 앞부분 확대(축 끊김 표시) */
+const curveCv = document.getElementById('curveCanvas');
+const cctx = curveCv.getContext('2d');
+
+function setupCanvas(cv, ctx) {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = cv.getBoundingClientRect();
+  if (rect.width === 0) return null;
+  cv.width = rect.width * dpr;
+  cv.height = rect.height * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, rect.width, rect.height);
+  return { W: rect.width, H: rect.height };
+}
+
+function drawCurveChart() {
+  const dim = setupCanvas(curveCv, cctx);
+  if (!dim) return;
+  const { W, H } = dim;
+  const m = currentMat;
+  const padL = 34, padB = 22, padR = 12, padT = 16;
+  const gw = W - padL - padR, gh = H - padT - padB;
+
+  const maxE = (m.ductile && !m.isRubber) ? m.ef * 1.08 : m.eu * 1.15;
+  const maxS = m.fu * 1.2;
+  const eb = m.ey * 3;                       // 확대 구간 끝
+  const useBreak = maxE > eb * 6;
+  const split = 0.32;                        // 앞 32% 폭을 탄성 구간에 할당
+  const X = e => {
+    if (!useBreak) return padL + (e / maxE) * gw;
+    if (e <= eb) return padL + (e / eb) * gw * split;
+    return padL + gw * split + ((e - eb) / (maxE - eb)) * gw * (1 - split);
+  };
+  const Y = s => (H - padB) - (s / maxS) * gh;
+
+  // 축
+  cctx.strokeStyle = '#a4b0be'; cctx.lineWidth = 1.2;
+  cctx.beginPath(); cctx.moveTo(padL, padT); cctx.lineTo(padL, H - padB); cctx.lineTo(W - padR, H - padB); cctx.stroke();
+  cctx.fillStyle = '#747d8c'; cctx.font = '10px "IBM Plex Mono", monospace';
+  cctx.fillText('σ [MPa]', 4, padT - 4);
+  cctx.fillText('ε', W - padR - 6, H - 6);
+  // 단면계수 식 (선도 오른쪽 아래, 곡선 아래 빈 자리). 좁은 선도에서는 아래 formula-strip 만 사용
+  if (W >= 300) {
+    const Snow = (isBroken && failSnap && failSnap.S) ? failSnap.S : BEAM_S;
+    const f1 = 'σ = M / S', f2 = `S = bh²/6 = ${Math.round(Snow * 1e6).toLocaleString()} cm³`;
+    cctx.font = 'bold 9px "IBM Plex Mono", monospace';
+    const fw = Math.max(cctx.measureText(f1).width, cctx.measureText(f2).width) + 10;
+    const fx = W - padR - fw - 2, fy0 = H - padB - 40;
+    cctx.fillStyle = 'rgba(255,255,255,0.88)'; cctx.strokeStyle = '#dfe4ea'; cctx.lineWidth = 1;
+    cctx.fillRect(fx - 2, fy0, fw + 2, 26); cctx.strokeRect(fx - 2, fy0, fw + 2, 26);
+    cctx.fillStyle = '#d63031'; cctx.fillText(f1, fx + 3, fy0 + 10);
+    cctx.fillStyle = '#57606f'; cctx.font = '9px "IBM Plex Mono", monospace'; cctx.fillText(f2, fx + 3, fy0 + 21);
+  }
+  if (useBreak) {
+    const bx = padL + gw * split;
+    cctx.strokeStyle = '#747d8c'; cctx.lineWidth = 1;
+    cctx.beginPath(); cctx.moveTo(bx - 4, H - padB + 4); cctx.lineTo(bx, H - padB - 4);
+    cctx.moveTo(bx, H - padB + 4); cctx.lineTo(bx + 4, H - padB - 4); cctx.stroke();
+    // 확대 구간 경계를 옅은 세로 점선으로, 설명은 위쪽에 (아래 ε 눈금과 겹치지 않게)
+    cctx.strokeStyle = '#e1e5ea'; cctx.setLineDash([2, 3]);
+    cctx.beginPath(); cctx.moveTo(bx, H - padB); cctx.lineTo(bx, padT); cctx.stroke(); cctx.setLineDash([]);
+    cctx.fillStyle = '#a4b0be'; cctx.font = '8px "IBM Plex Sans KR", sans-serif';
+    cctx.fillText('◀ 탄성구간 확대', bx + 3, padT + 7);
+  }
+
+  // 곡선 아래 면적 (인성)
+  const samples = [];
+  for (let i = 0; i <= 200; i++) {
+    let e;
+    if (useBreak) e = i <= 64 ? (eb * i / 64) : eb + (maxE - eb) * (i - 64) / 136;
+    else e = maxE * i / 200;
+    samples.push([e, stressAtStrain(m, e)]);
+  }
+  cctx.fillStyle = 'rgba(112,161,255,0.12)';
+  cctx.beginPath(); cctx.moveTo(X(0), Y(0));
+  samples.filter(([e]) => e <= m.eu).forEach(([e, s]) => cctx.lineTo(X(e), Y(s)));
+  cctx.lineTo(X(m.eu), Y(stressAtStrain(m, m.eu)));
+  cctx.lineTo(X(m.eu), Y(0)); cctx.closePath(); cctx.fill();
+
+  // 재료 곡선 (이 실험의 파괴 판정점 ε_u 까지 실선, 이후 네킹 구간은 참고용 점선)
+  const endE = m.eu;
+  cctx.strokeStyle = '#2f3542'; cctx.lineWidth = 2.2;
+  cctx.beginPath();
+  samples.filter(([e]) => e <= endE).forEach(([e, s], i) => { if (i === 0) cctx.moveTo(X(e), Y(s)); else cctx.lineTo(X(e), Y(s)); });
+  cctx.lineTo(X(endE), Y(stressAtStrain(m, endE)));
+  cctx.stroke();
+  if (m.ductile && !m.isRubber) {
+    cctx.strokeStyle = '#c8d0da'; cctx.lineWidth = 1.6; cctx.setLineDash([4, 3]);
+    cctx.beginPath(); cctx.moveTo(X(endE), Y(m.fu));
+    samples.filter(([e]) => e > endE && e <= m.ef).forEach(([e, s]) => cctx.lineTo(X(e), Y(s)));
+    cctx.stroke(); cctx.setLineDash([]);
+    cctx.fillStyle = '#a4b0be'; cctx.font = '8px "IBM Plex Sans KR", sans-serif';
+    cctx.fillText('네킹(참고)', Math.min(X((endE + m.ef) / 2), W - padR - 40), Y(m.fu * 0.93) + 12);
+  }
+
+  // 항복/극한 보조선
+  cctx.setLineDash([3, 3]); cctx.strokeStyle = '#ced6e0'; cctx.lineWidth = 1;
+  cctx.beginPath(); cctx.moveTo(padL, Y(m.fy)); cctx.lineTo(W - padR, Y(m.fy)); cctx.stroke();
+  cctx.beginPath(); cctx.moveTo(padL, Y(m.fu)); cctx.lineTo(W - padR, Y(m.fu)); cctx.stroke();
+  cctx.setLineDash([]);
+  cctx.font = '9px "IBM Plex Sans KR", sans-serif';
+  cctx.fillStyle = '#20bf6b';
+  cctx.fillText(`${terms().word} ${terms().sym} ${m.fy}`, padL + 4, Y(m.fy) - 3);
+  cctx.fillStyle = '#eb3b5a';
+  const fuLbl = `극한 σu ${m.fu}`;
+  const close = Math.abs(Y(m.fu) - Y(m.fy)) < 12;   // 두 한계가 가까우면 극한 라벨은 오른쪽으로
+  cctx.fillText(fuLbl, close ? W - padR - cctx.measureText(fuLbl).width - 14 : padL + 4, Y(m.fu) - 3);
+
+  // ε 축 눈금: 항복변형률 εy 와 파단 변형률
+  cctx.fillStyle = '#747d8c'; cctx.strokeStyle = '#a4b0be'; cctx.lineWidth = 1;
+  cctx.font = '8px "IBM Plex Mono", monospace';
+  const tickE = [[m.ey, `εy ${fmtStrain(m.ey)}`], [m.eu, `εu ${fmtStrain(m.eu)}`]];
+  if (m.ductile && !m.isRubber) tickE.push([m.ef, `εf ${fmtStrain(m.ef)}`]);
+  tickE.forEach(([e, t], i) => {
+    const tx = X(e);
+    cctx.beginPath(); cctx.moveTo(tx, H - padB); cctx.lineTo(tx, H - padB + 3); cctx.stroke();
+    const w = cctx.measureText(t).width;
+    cctx.fillText(t, Math.min(W - padR - w, Math.max(padL, tx - w / 2)), H - padB + 11 + (i === 0 && useBreak ? 8 : 0));
+  });
+
+  // 하중 제거 경로 & 잔류변형률
+  const curS = Math.min(currentMaxStress, maxS);
+  const curE = Math.min(rootStrainNow, maxE);
+  if (rootPlasticStrain > 0 && !isBroken) {
+    const histS = Math.min(rootStressHist, m.fu);
+    const histE = strainAtStress(m, histS);
+    cctx.strokeStyle = '#ff4757'; cctx.lineWidth = 1.5; cctx.setLineDash([4, 3]);
+    cctx.beginPath(); cctx.moveTo(X(histE), Y(histS)); cctx.lineTo(X(rootPlasticStrain), Y(0)); cctx.stroke();
+    cctx.setLineDash([]);
+    cctx.fillStyle = '#ff4757';
+    cctx.beginPath(); cctx.arc(X(rootPlasticStrain), Y(0), 3, 0, Math.PI * 2); cctx.fill();
+    cctx.font = '9px "IBM Plex Mono", monospace';
+    const lbl = `잔류 εp=${fmtStrain(rootPlasticStrain)}`;
+    const lx = Math.min(X(rootPlasticStrain) - 10, W - padR - cctx.measureText(lbl).width);
+    cctx.fillText(lbl, Math.max(padL + 2, lx), H - padB - 4);
+  }
+
+  // 현재 작동점
+  if (!isBroken) {
+    cctx.fillStyle = curS > m.fy ? '#ff4757' : '#0984e3';
+    cctx.beginPath(); cctx.arc(X(curE), Y(curS), 5.5, 0, Math.PI * 2); cctx.fill();
+    cctx.strokeStyle = '#ffffff'; cctx.lineWidth = 1.5; cctx.stroke();
+  } else {
+    cctx.fillStyle = '#2f3542'; cctx.font = 'bold 14px sans-serif';
+    cctx.fillText('✕', X(Math.min(m.eu, maxE)) - 5, Y(m.fu) + 5);
+  }
+}
+
+/* 휨모멘트도 (Bending Moment Diagram) */
+const bmdCv = document.getElementById('bmdCanvas');
+let lastBMD = null;   // 마지막으로 그린 한계모멘트 (테스트/디버깅용)
+const bctx = bmdCv.getContext('2d');
+
+function drawBMD() {
+  const dim = setupCanvas(bmdCv, bctx);
+  if (!dim) return;
+  const { W, H } = dim;
+  const loads = (isBroken && failSnap) ? failSnap.loads : loadsOnBeam();
+  const T = terms();
+  const padL = 14, padR = 12, padT = 18, padB = 18;
+  const gw = W - padL - padR, gh = H - padT - padB;
+  const X = x => padL + (x / BEAM_L) * gw;
+
+  const M0 = momentAt(0, loads) / 1000;
+  const Ssec = (isBroken && failSnap) ? failSnap.S : BEAM_S;   // 파괴 후에는 임계 순간 단면 기준
+  const My = currentMat.fy * 1e6 * Ssec / 1000;
+  const Mu = currentMat.fu * 1e6 * Ssec / 1000;
+  lastBMD = { My, Mu };
+  const scale = Math.max(M0 * 1.25, Math.min(My, 5), 1);
+  const Y = M => padT + (M / scale) * gh;          // 아래로 그림 (부모멘트)
+
+  // 벽 해칭
+  bctx.fillStyle = '#636e72'; bctx.fillRect(0, padT - 6, padL - 4, gh + 12);
+  // 기준선(보)
+  bctx.strokeStyle = '#2f3542'; bctx.lineWidth = 2;
+  bctx.beginPath(); bctx.moveTo(X(0), padT); bctx.lineTo(X(BEAM_L), padT); bctx.stroke();
+
+  // 항복 모멘트선
+  if (My <= scale) {
+    bctx.setLineDash([3, 3]); bctx.strokeStyle = '#20bf6b'; bctx.lineWidth = 1;
+    bctx.beginPath(); bctx.moveTo(X(0), Y(My)); bctx.lineTo(X(BEAM_L), Y(My)); bctx.stroke();
+    bctx.setLineDash([]);
+    bctx.fillStyle = '#20bf6b'; bctx.font = '9px "IBM Plex Mono", monospace';
+    bctx.fillText(`${T.M}=${My.toFixed(1)}`, X(BEAM_L) - 66, Y(My) - 3);
+  }
+  if (Mu <= scale) {
+    bctx.setLineDash([2, 3]); bctx.strokeStyle = '#eb3b5a'; bctx.lineWidth = 1;
+    bctx.beginPath(); bctx.moveTo(X(0), Y(Mu)); bctx.lineTo(X(BEAM_L), Y(Mu)); bctx.stroke();
+    bctx.setLineDash([]);
+    bctx.fillStyle = '#eb3b5a'; bctx.font = '9px "IBM Plex Mono", monospace';
+    bctx.fillText(`Mu=${Mu.toFixed(1)}`, X(BEAM_L) - 66, Y(Mu) - 3);
+  }
+
+  // M(x) 면적
+  if (M0 > 0) {
+    bctx.fillStyle = 'rgba(255,71,87,0.22)'; bctx.strokeStyle = '#ff4757'; bctx.lineWidth = 1.8;
+    bctx.beginPath(); bctx.moveTo(X(0), padT);
+    for (let i = 0; i <= 120; i++) { const x = BEAM_L * i / 120; bctx.lineTo(X(x), Y(momentAt(x, loads) / 1000)); }
+    bctx.lineTo(X(BEAM_L), padT); bctx.closePath(); bctx.fill();
+    bctx.beginPath();
+    for (let i = 0; i <= 120; i++) { const x = BEAM_L * i / 120; const yy = Y(momentAt(x, loads) / 1000); if (i === 0) bctx.moveTo(X(x), yy); else bctx.lineTo(X(x), yy); }
+    bctx.stroke();
+    bctx.fillStyle = '#d63031'; bctx.font = 'bold 10px "IBM Plex Mono", monospace';
+    bctx.fillText(`M=${M0.toFixed(1)} kN·m` + (isBroken ? ' (임계 순간)' : ''), X(0) + 4, Math.min(H - 4, Y(M0) + 12));
+  } else {
+    bctx.fillStyle = '#a4b0be'; bctx.font = '10px "IBM Plex Sans KR", sans-serif';
+    bctx.fillText('하중을 올리면 모멘트 분포가 그려집니다', X(0.3), padT + gh / 2);
+  }
+  if (My > scale) {
+    bctx.fillStyle = '#20bf6b'; bctx.font = '9px "IBM Plex Mono", monospace';
+    bctx.fillText(`${T.Mword} ${T.M}=${My.toFixed(0)} kN·m (그래프 밖)`, X(0) + 4, H - 4);
+  }
+
+  // 하중 화살표
+  bctx.fillStyle = '#2f3542'; bctx.strokeStyle = '#2f3542'; bctx.lineWidth = 1.5;
+  loads.forEach(c => {
+    const x = X(c.xPos);
+    bctx.beginPath(); bctx.moveTo(x, 2); bctx.lineTo(x, padT - 3); bctx.stroke();
+    bctx.beginPath(); bctx.moveTo(x - 3, padT - 7); bctx.lineTo(x, padT - 2); bctx.lineTo(x + 3, padT - 7); bctx.fill();
+  });
+}
+
+/* 하중 목록: 각 하중의 P·x 기여분을 보여줘 M = ΣP·x 를 체감 */
+const LOAD_TYPES = {
+  weight100: { name: '시험추', icon: '📦', weight: 100, len: 0.32, make: () => createTestWeight() },
+  block500:  { name: '적재블록', icon: '🧱', weight: 500, len: 0.52, make: () => createBlockPallet() },
+  worker:    { name: '작업자', icon: '🧍', weight: 75, len: 0.32, make: () => createVoxelEngineer() },
+  car:       { name: '차량하중', icon: '🚗', weight: 1500, len: 0.76, make: () => createVoxelCar() },
+  heavy:     { name: '중장비', icon: '🏗️', weight: 5000, len: 0.86, make: () => createVoxelHeavy() }
+};
+
+function renderLoadList() {
+  const box = document.getElementById('loadList');
+  if (!box) return;
+  const loads = ((isBroken && failSnap) ? failSnap.loads : loadsOnBeam()).slice().sort((a, b) => b.xPos - a.xPos);
+  if (loads.length === 0) {
+    box.innerHTML = '<div class="load-empty">아직 올린 하중물이 없습니다.</div>';
+    return;
+  }
+  let html = '<div class="load-head"><span>하중 × 위치 x</span><span>P·x [kN·m]</span></div>';
+  loads.forEach(c => {
+    const t = LOAD_TYPES[c.type];
+    const Mx = c.weight * G * c.xPos / 1000;
+    const partial = isBroken && c.frac && c.frac < 0.9999;
+    const wTxt = partial ? `${(Math.round(c.weight * 10) / 10).toLocaleString()}kg<small> (${c.orig.toLocaleString()}의 ${(c.frac * 100).toFixed(0)}%)</small>` : `${c.weight.toLocaleString()}kg`;
+    html += `<div class="load-row${partial ? ' partial' : ''}"><span class="ic">${t.icon}</span>` +
+            `<span class="nm">${wTxt} × ${c.xPos.toFixed(2)}m</span>` +
+            `<span class="mx">${Mx.toFixed(1)}</span>` +
+            (isBroken ? '' : `<button data-remove="${c.id}" title="이 하중 제거">×</button>`) + '</div>';
+  });
+  const sumM = loads.reduce((a, c) => a + c.weight * G * c.xPos, 0) / 1000;
+  html += `<div class="load-sum"><span>고정단 M = Σ P·x${isBroken ? ' (임계 순간)' : ''}</span><span>${sumM.toFixed(1)}</span></div>`;
+  box.innerHTML = html;
+}
+
+document.getElementById('loadList').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-remove]');
+  if (!btn) return;
+  removeLoadById(Number(btn.dataset.remove));
+});
+
+function removeLoadById(id) {
+  const idx = characters.findIndex(c => c.id === id);
+  if (idx === -1 || isBroken) return;
+  invalidateLoadPlans();
+  const c = characters[idx];
+  emitPuff(c.mesh.position.x, c.mesh.position.y, c.mesh.position.z);
+  removeMesh(c.mesh);
+  characters.splice(idx, 1);
+  playSound('recover');
+  calculateBeamPhysics();
+}
+
+/* ─────────────────────────────────────────────────────────────
+   10. 드래그 앤 드롭 & 스폰 인터랙션
+   ───────────────────────────────────────────────────────────── */
+let isDragging = false;
+let draggedType = null;
+const dragGhost = document.getElementById('dragGhost');
+const ghostIcon = dragGhost.querySelector('.ic');
+const ghostCap = dragGhost.querySelector('.cap');
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+const beamPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+let dragStartX = 0, dragStartY = 0;
+let hasDragged = false;
+let nextLoadId = 1;
+
+// 드롭 위치 미리보기 (보 위 반투명 기둥)
+const previewMarker = new THREE.Mesh(
+  new THREE.BoxGeometry(0.08, 1.4, BEAM_B * 2.2),
+  new THREE.MeshBasicMaterial({ color: 0xff4757, transparent: true, opacity: 0.45, depthTest: false })
+);
+previewMarker.visible = false;
+previewMarker.renderOrder = 10;
+scene.add(previewMarker);
+function hidePreview() { previewMarker.visible = false; }
+
+// 화면 좌표 → 보 위 길이좌표 x. 보 형상을 화면에 투영해 '픽셀 거리'로 판정 (카메라 각도·줌과 무관하게 일정)
+const DROP_PX = 56;
+function screenToBeamX(clientX, clientY, noLimit) {
+  const rect = canvas.getBoundingClientRect();
+  const v = new THREE.Vector3();
+  let best = -1, bestD = Infinity;
+  for (let i = 0; i < visPts.length; i++) {
+    v.set(visPts[i].x, visPts[i].y + BEAM_H / 2, 0).project(camera);
+    const px = rect.left + (v.x + 1) / 2 * rect.width;
+    const py = rect.top + (1 - v.y) / 2 * rect.height;
+    const d = Math.hypot(px - clientX, py - clientY);
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  if (best < 0 || (!noLimit && bestD > DROP_PX)) return null;
+  const s = visPts[best].s;
+  return Math.max(0.3, Math.min(BEAM_L - 0.1, s));
+}
+
+function updateDragPreview(clientX, clientY) {
+  dragGhost.classList.remove('moving');
+  dragGhost.style.display = 'block';
+  dragGhost.style.left = clientX + 'px';
+  dragGhost.style.top = clientY + 'px';
+  const x0 = isBroken ? null : screenToBeamX(clientX, clientY);
+  const x = x0 === null ? null : (nearestFreeX(draggedType, x0) ?? x0);
+  const t = LOAD_TYPES[draggedType];
+  if (x === null) {
+    ghostCap.textContent = isBroken ? '보가 파괴됨 · 시편 교체 필요' : '보 위로 가져오세요';
+    ghostCap.classList.add('off');
+    hidePreview();
+  } else {
+    const dM = t.weight * G * x / 1000;
+    ghostCap.textContent = `x = ${x.toFixed(2)} m · +${dM.toFixed(1)} kN·m`;
+    ghostCap.classList.remove('off');
+    const p = samplePts(visPts, x);
+    previewMarker.position.set(p.x, p.y + 0.7, 0);
+    previewMarker.rotation.z = -p.phi;
+    previewMarker.visible = true;
+  }
+}
+
+function setupSpawner(elemId, type) {
+  const elem = document.getElementById(elemId);
+  if (!elem) {
+    console.warn('[Cantilever] 도크 요소를 찾을 수 없음:', elemId);
+    return;
+  }
+  const start = (x, y) => {
+    isDragging = true;
+    hasDragged = false;
+    dragStartX = x; dragStartY = y;
+    draggedType = type;
+    ghostIcon.textContent = LOAD_TYPES[type].icon;
+  };
+  elem.addEventListener('mousedown', (e) => { e.preventDefault(); start(e.clientX, e.clientY); });
+  elem.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 1) start(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: true });
+
+  // 단순 클릭: 끝단부터 빈자리에 자동 배치
+  elem.addEventListener('click', () => {
+    if (hasDragged) return;
+    if (isBroken) {
+      showToast('⚠️ 보가 이미 파괴되었습니다! [시편 교체] 버튼을 먼저 눌러주세요.', 'warning');
+      return;
+    }
+    spawnCharacterAt(type, findFreeSpot(type));
+  });
+}
+// HTML 도크의 id와 반드시 일치해야 함
+setupSpawner('spawnWeight100', 'weight100');
+setupSpawner('spawnBlock500', 'block500');
+setupSpawner('spawnWorker', 'worker');
+setupSpawner('spawnCar', 'car');
+setupSpawner('spawnHeavy', 'heavy');
+
+// x 에 놓으려는데 다른 하중과 겹치면, 겹치지 않는 가장 가까운 자리 (없으면 null)
+function nearestFreeX(type, x, ignoreId) {
+  const half = LOAD_TYPES[type].len / 2;
+  const lo = 0.3, hi = BEAM_L - 0.1, tol = 0.006;   // tol: 0.01 m 반올림 여유
+  const blocks = loadsOnBeam().filter(c => c.id !== ignoreId).map(c => {
+    const r = half + LOAD_TYPES[c.type].len / 2 + 0.02;
+    return [c.xPos - r, c.xPos + r];
+  });
+  const free = v => v >= lo - 1e-9 && v <= hi + 1e-9 && blocks.every(([a, b]) => v <= a + tol || v >= b - tol);
+  if (free(x)) return x;
+  let best = null;
+  blocks.forEach(([a, b]) => [a, b].forEach(v => {
+    if (free(v) && (best === null || Math.abs(v - x) < Math.abs(best - x))) best = v;
+  }));
+  return best;
+}
+
+// 끝단에서부터 다른 하중과 겹치지 않는 위치 찾기
+function findFreeSpot(type) {
+  const half = LOAD_TYPES[type].len / 2;
+  const loads = loadsOnBeam();
+  for (let x = BEAM_L - 0.05 - half; x >= 0.35 + half; x -= 0.05) {
+    const clash = loads.some(c => Math.abs(c.xPos - x) < half + LOAD_TYPES[c.type].len / 2 + 0.02);
+    if (!clash) return Math.round(x * 100) / 100;
+  }
+  return Math.round((BEAM_L - 0.05 - half) * 100) / 100; // 자리가 없으면 끝단에 겹쳐 올림
+}
+
+function onPointerMove(x, y, isTouch) {
+  if (!isDragging) return;
+  const dx = x - dragStartX, dy = y - dragStartY;
+  if (!hasDragged && Math.hypot(dx, dy) > 6) {
+    // 터치에서 가로로 미는 동작은 도크 스크롤로 양보 (위로 끌어올릴 때만 드래그 시작)
+    if (isTouch && Math.abs(dx) > Math.abs(dy)) { isDragging = false; return; }
+    hasDragged = true;
+  }
+  if (hasDragged) updateDragPreview(x, y);
+}
+window.addEventListener('mousemove', (e) => onPointerMove(e.clientX, e.clientY));
+window.addEventListener('touchmove', (e) => {
+  if (e.touches.length === 1) onPointerMove(e.touches[0].clientX, e.touches[0].clientY, true);
+}, { passive: true });
+
+function handleDrop(clientX, clientY) {
+  if (!isDragging) return;
+  const wasDragged = hasDragged;
+  isDragging = false;
+  dragGhost.style.display = 'none';
+  hidePreview();
+  if (!wasDragged) return;               // 단순 클릭은 click 이벤트에서 처리
+  if (isBroken) {
+    showToast('⚠️ 보가 이미 파괴되었습니다! [시편 교체] 버튼을 먼저 눌러주세요.', 'warning');
+    return;
+  }
+  const x = screenToBeamX(clientX, clientY);
+  if (x === null) {
+    showToast('보(Beam) 위에 놓아야 하중이 작용합니다.', 'normal');
+    return;
+  }
+  spawnCharacterAt(draggedType, Math.round((nearestFreeX(draggedType, x) ?? x) * 100) / 100);
+}
+window.addEventListener('mouseup', (e) => handleDrop(e.clientX, e.clientY));
+window.addEventListener('touchend', (e) => {
+  if (e.changedTouches.length > 0) handleDrop(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+});
+// 도크 클릭 직후 hasDragged 초기화 (드래그 후 클릭 이벤트 오인 방지)
+window.addEventListener('click', () => { setTimeout(() => { if (!isDragging) hasDragged = false; }, 0); });
+
+// 3D 화면의 하중물: 끌면 보 위에서 위치 이동(실시간 재계산), 그냥 클릭하면 제거
+let moveDrag = null;   // { id, sx, sy, moved }
+let orbitDrag = null;  // 빈 곳을 끌 때 { x, y }
+function pickLoadAt(clientX, clientY) {
+  if (isBroken) return null;
+  const rect = canvas.getBoundingClientRect();
+  mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const onBeam = loadsOnBeam();
+  const meshes = onBeam.map(c => c.mesh);
+  const hits = raycaster.intersectObjects(meshes, true);
+  if (hits.length) {
+    let obj = hits[0].object;
+    while (obj.parent && !meshes.includes(obj)) obj = obj.parent;
+    const c = onBeam.find(cc => cc.mesh === obj);
+    if (c) return c;
+  }
+  // 작은 화면에서도 잡기 쉽게: 화면상 가까운(18px 이내) 하중물
+  let best = null, bestD = 18;
+  const v = new THREE.Vector3();
+  onBeam.forEach(c => {
+    new THREE.Box3().setFromObject(c.mesh).getCenter(v).project(camera);
+    const d = Math.hypot(rect.left + (v.x + 1) / 2 * rect.width - clientX, rect.top + (1 - v.y) / 2 * rect.height - clientY);
+    if (d < bestD) { bestD = d; best = c; }
+  });
+  return best;
+}
+// 끌어 옮기는 하중이 움직일 수 있는 빈 구간 [a, b]: 양옆 하중에 닿는 곳까지 (하중끼리는 서로 통과하지 못함)
+// → 이동 경로가 항상 연속이라, 옮기다 파괴될 때 재구성한 임계 위치 x_cr 도 이 구간 안(겹침 없음)에 있다
+function moveGap(c) {
+  const half = LOAD_TYPES[c.type].len / 2;
+  let a = 0.3, b = BEAM_L - 0.1;
+  loadsOnBeam().forEach(o => {
+    if (o.id === c.id) return;
+    const r = half + LOAD_TYPES[o.type].len / 2 + 0.02;
+    if (Math.abs(o.xPos - c.xPos) < r - 1e-9) return;     // (예전 배치로) 이미 겹쳐 있던 하중은 제약에서 뺌
+    if (o.xPos <= c.xPos) a = Math.max(a, o.xPos + r); else b = Math.min(b, o.xPos - r);
+  });
+  return [Math.ceil(a * 100 - 1e-6) / 100, Math.floor(b * 100 + 1e-6) / 100];   // 0.01 m 반올림도 안쪽으로
+}
+// 하중 위치 바꾸기 (끌어 옮기기 · 테스트에서 직접 호출). 다른 하중에 막히면 'blocked'
+function setLoadX(id, x) {
+  const c = characters.find(k => k.id === id && k.onBeam);
+  if (!c || isBroken) return false;
+  const [a, b] = moveGap(c);
+  const want = Math.round(Math.max(0.3, Math.min(BEAM_L - 0.1, x)) * 100) / 100;
+  const nx = Math.max(Math.min(a, c.xPos), Math.min(Math.max(b, c.xPos), want));
+  const blocked = (want < a - 1e-9 && a > 0.3 + 1e-9) || (want > b + 1e-9 && b < BEAM_L - 0.1 - 1e-9);
+  if (nx !== c.xPos) {
+    invalidateLoadPlans();
+    c.xPos = nx;
+    calculateBeamPhysics();
+    if (Math.abs(nx - (moveDrag && moveDrag.x0 != null ? moveDrag.x0 : nx)) >= 0.3 - 1e-9 && typeof completeMission === 'function') completeMission('move');
+  }
+  return blocked ? 'blocked' : true;
+}
+function showMoveCaption(c, clientX, clientY, blocked) {
+  dragGhost.classList.add('moving');
+  dragGhost.style.display = 'block';
+  dragGhost.style.left = clientX + 'px';
+  dragGhost.style.top = clientY + 'px';
+  ghostCap.classList.remove('off');
+  ghostCap.textContent = isBroken
+    ? `💥 x = ${c.xPos.toFixed(2)} m에서 파괴!`
+    : `${LOAD_TYPES[c.type].icon} x = ${c.xPos.toFixed(2)} m · P·x = ${(c.weight * G * c.xPos / 1000).toFixed(1)} kN·m` +
+      (blocked ? ' · 다른 하중에 막힘' : '');
+}
+function hideMoveCaption() {
+  dragGhost.style.display = 'none';
+  dragGhost.classList.remove('moving');
+  canvas.style.cursor = '';
+}
+canvas.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0 || isDragging) return;
+  const c = pickLoadAt(e.clientX, e.clientY);
+  if (!c) {
+    moveDrag = null;
+    orbitDrag = { x: e.clientX, y: e.clientY };
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+    return;
+  }
+  moveDrag = { id: c.id, sx: e.clientX, sy: e.clientY, moved: false, x0: c.xPos };
+  try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+  e.preventDefault();
+});
+canvas.addEventListener('pointermove', (e) => {
+  if (orbitDrag) {
+    orbitBy(e.clientX - orbitDrag.x, e.clientY - orbitDrag.y);
+    orbitDrag = { x: e.clientX, y: e.clientY };
+    canvas.style.cursor = 'grabbing';
+    return;
+  }
+  if (!moveDrag) {
+    if (!isDragging && e.pointerType === 'mouse') canvas.style.cursor = pickLoadAt(e.clientX, e.clientY) ? 'grab' : '';
+    return;
+  }
+  if (!moveDrag.moved) {
+    if (Math.hypot(e.clientX - moveDrag.sx, e.clientY - moveDrag.sy) < 5) return;
+    moveDrag.moved = true;
+    hideFirstHint();
+    canvas.style.cursor = 'grabbing';
+  }
+  const x = screenToBeamX(e.clientX, e.clientY, true);
+  const res = x !== null ? setLoadX(moveDrag.id, x) : true;
+  const c = characters.find(k => k.id === moveDrag.id);
+  if (c) showMoveCaption(c, e.clientX, e.clientY, res === 'blocked');
+  if (isBroken) {                       // 옮기다 파괴되면 그 자리에서 끝 (캡션은 잠깐 보여 줌)
+    moveDrag = null;
+    setTimeout(() => { if (dragGhost.classList.contains('moving')) hideMoveCaption(); }, 1200);
+  }
+});
+canvas.addEventListener('pointerup', () => {
+  if (orbitDrag) { orbitDrag = null; canvas.style.cursor = ''; }
+  const d = moveDrag;
+  moveDrag = null;
+  if (!d) return;
+  hideMoveCaption();
+  if (!d.moved) { removeLoadById(d.id); return; }
+  const c = characters.find(k => k.id === d.id && k.onBeam);
+  if (c && !isBroken && c.xPos !== d.x0) {          // 실제로 자리가 바뀐 경우에만 놓기 효과
+    playSound('drop');
+    c.squashTimer = 1.0;
+    emitPuff(c.baseX, c.baseY, c.zOffset || 0);
+  }
+});
+canvas.addEventListener('pointercancel', () => { moveDrag = null; orbitDrag = null; hideMoveCaption(); });
+
+function hideFirstHint() {
+  const h = document.getElementById('firstHint');
+  if (h) h.classList.add('hidden');
+}
+document.getElementById('firstHintClose').addEventListener('click', hideFirstHint);
+
+function spawnCharacterAt(type, xPos, quiet) {
+  if (!quiet) { invalidateLoadPlans(); hideFirstHint(); }
+  const t = LOAD_TYPES[type] || LOAD_TYPES.worker;
+  if (!LOAD_TYPES[type]) type = 'worker';
+  const mesh = t.make();
+  const zOffset = (Math.random() - 0.5) * 0.06;
+  mesh.position.set(xPos, 2, zOffset);
+  scene.add(mesh);
+
+  characters.push({
+    id: nextLoadId++,
+    type,
+    weight: t.weight,
+    xPos,
+    zOffset,
+    mesh,
+    onBeam: true,
+    baseScale: mesh.scale.x,
+    squashTimer: quiet ? 0 : 1.0
+  });
+
+  if (!quiet) playSound('drop');
+  calculateBeamPhysics();
+  const c = characters[characters.length - 1];
+  if (c && c.onBeam) emitPuff(c.baseX, c.baseY, zOffset);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   11. 버튼 핸들러 (Unload, Reset, Material, 두께, 배율)
+   ───────────────────────────────────────────────────────────── */
+document.getElementById('btnUnload').addEventListener('click', () => {
+  if (isBroken) {
+    showToast('보가 이미 파괴되었습니다. [시편 교체]를 눌러 새 보로 바꿔주세요.', 'warning');
+    return;
+  }
+  if (loadsOnBeam().length === 0) {
+    showToast('보 위에 올려진 하중물이 없습니다!', 'normal');
+    return;
+  }
+  invalidateLoadPlans();
+  characters.forEach(c => {
+    emitPuff(c.mesh.position.x, c.mesh.position.y, c.mesh.position.z);
+    removeMesh(c.mesh);
+  });
+  characters = [];
+  playSound('recover');
+  calculateBeamPhysics();
+
+  if (currentPermanent > 0.05) {
+    showToast(`⚠️ [하중 제거] 탄성 변형은 돌아왔지만 항복을 넘었던 부분 때문에 ${currentPermanent.toFixed(1)} cm 영구 처짐이 남았습니다!`, 'warning');
+  } else {
+    showToast('✨ [하중 제거] 탄성 범위였으므로 100% 원래 모양으로 복원되었습니다!', 'success');
+  }
+});
+
+document.getElementById('btnReset').addEventListener('click', () => {
+  invalidateLoadPlans();
+  resetExperiment();
+  showToast('🔄 새로운 시편으로 교체되었습니다!', 'normal');
+});
+
+// 씬에서 뺀 객체의 GPU 리소스 해제 (반복 실험 시 메모리 누수 방지)
+function disposeObject(obj) {
+  obj.traverse(o => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(mt => mt.dispose());
+  });
+}
+function removeMesh(obj) {
+  if (obj.parent) obj.parent.remove(obj);
+  disposeObject(obj);
+}
+
+function resetExperiment() {
+  characters.forEach(c => removeMesh(c.mesh));
+  characters = [];
+  while (debrisGroup.children.length > 0) removeMesh(debrisGroup.children[0]);
+
+  isBroken = false;
+  failureMode = null;
+  failSnap = null;
+  lastStableIds = new Set();
+  lastStableX = new Map();
+  lastStableH = null;
+  if (typeof missionFlags !== 'undefined') missionFlags.rubberBig = false;
+  plasticKappa = new Float64Array(N_PL + 1);
+  rootPlasticStrain = 0;
+  rootStressHist = 0;
+  rootStrainNow = 0;
+  wasOverYield = false;
+  currentMaxMoment = 0;
+  currentMaxStress = 0;
+  currentDeflection = 0;
+  currentPermanent = 0;
+  beamGroup.visible = true;
+  beamLabels.forEach(l => { l.sprite.visible = true; });
+  beamSegments.forEach(seg => { seg.scale.y = BEAM_H / BEAM_H0; });
+  bracket.scale.y = BEAM_H / BEAM_H0;
+
+  beamSegments.forEach(seg => {
+    seg.material[0].color.setHex(currentMat.color);
+    seg.material[2].color.setHex(currentMat.topColor);
+  });
+  calculateBeamPhysics();
+}
+
+document.getElementById('matGrid').addEventListener('click', (e) => {
+  const btn = e.target.closest('.mat-btn');
+  if (!btn) return;
+  document.querySelectorAll('.mat-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (btn.dataset.mat === currentMatKey && !isBroken) return;
+  // 같은 하중 조건으로 재료만 바꿔 비교할 수 있도록, 올려둔 하중(종류·위치)을 새 시편에 그대로 다시 올린다
+  const keep = currentLoadPlan();
+  sliderKeep = null;
+  const mn = document.getElementById('missionNote');
+  if (mn) mn.style.display = 'none';
+  currentMatKey = btn.dataset.mat;
+  currentMat = MATERIALS[currentMatKey];
+  resetExperiment();
+  const placed = respawnLoads(keep);
+  if (!keep.length) showToast(`${currentMat.name} 시편으로 교체했습니다.`, 'normal');
+  else if (placed < keep.length) showToast(`💥 새 ${currentMat.name} 시편은 같은 하중 ${keep.length}개 중 ${placed}번째를 올리는 순간 파괴되었습니다!`, 'danger');
+  else showToast(`🔁 새 ${currentMat.name} 시편에 같은 하중 ${keep.length}개를 다시 올렸습니다.`, 'normal');
+});
+
+// 보관한 하중을 새 시편에 순서대로 다시 올림. 도중에 파괴되면 거기까지의 개수를 돌려준다
+function respawnLoads(list) {
+  let n = 0;
+  for (const k of list) {
+    if (isBroken) break;
+    spawnCharacterAt(k.type, k.x, true);
+    n++;
+  }
+  intendedLoads = n < list.length ? list.slice() : null;   // 중간에 파괴되면 원래 목록을 기억
+  return n;
+}
+// 현재 실험의 하중 목록: 중간 파괴로 일부만 올라간 상태라면 원래 의도한 전체 목록
+function currentLoadPlan() {
+  if (isBroken && intendedLoads) return intendedLoads.slice();
+  return characters.filter(c => c.onBeam || isBroken).map(c => ({ type: c.type, x: c.xPos }));
+}
+// 사용자가 하중 구성을 직접 바꾸면 보관 목록은 무효
+function invalidateLoadPlans() { intendedLoads = null; sliderKeep = null; }
+
+const beamHSlider = document.getElementById('beamHSlider');
+const beamHVal = document.getElementById('beamHVal');
+let thickResetNotified = false;
+let sliderKeep = null;   // 슬라이더를 잡고 있는 동안의 원래 하중 목록 (중간 파괴로 유실되지 않게)
+let intendedLoads = null;
+beamHSlider.addEventListener('change', () => { sliderKeep = null; });
+beamHSlider.addEventListener('pointerup', () => { sliderKeep = null; });
+beamHSlider.addEventListener('keyup', () => { sliderKeep = null; });
+beamHSlider.addEventListener('input', (e) => {
+  const h = parseFloat(e.target.value);
+  BEAM_H = h;
+  BEAM_I = (BEAM_B * Math.pow(BEAM_H, 3)) / 12;
+  BEAM_S = (BEAM_B * Math.pow(BEAM_H, 2)) / 6;
+  beamHVal.textContent = Math.round(h * 100) + ' cm';
+  const overBefore = !isBroken && currentMaxStress > currentMat.fy && currentMat.ductile && !currentMat.isRubber;
+  if (!sliderKeep) sliderKeep = currentLoadPlan();
+  const keepH = sliderKeep;
+  const hadHistory = isBroken || rootPlasticStrain > 0;
+  const scaleY = BEAM_H / BEAM_H0;
+  beamSegments.forEach(seg => { seg.scale.y = scaleY; });
+  bracket.scale.y = scaleY;
+  if (hadHistory) {
+    // 소성/파괴 이력이 있는 보의 단면을 바꿀 수는 없으므로 새 두께의 시편에 같은 하중을 다시 올린다
+    resetExperiment();
+    respawnLoads(keepH);
+    if (!thickResetNotified) {
+      thickResetNotified = true;
+      showToast('📐 두께를 바꾸면 새 시편으로 교체됩니다 (같은 하중 유지, 소성 이력 초기화).', 'normal');
+    }
+  } else {
+    calculateBeamPhysics();
+  }
+  if (overBefore && !isBroken && currentMaxStress <= currentMat.fy) completeMission('thick');
+});
+
+document.getElementById('scaleControl').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-scale]');
+  if (!btn) return;
+  document.querySelectorAll('#scaleControl button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  scaleMode = btn.dataset.scale;
+  if (isBroken) { showToast('파괴된 상태에서는 배율이 적용되지 않습니다. [시편 교체] 후 확인하세요.', 'normal'); }
+  if (isBroken) { updateHUD(); return; }
+  calculateBeamPhysics();
+});
+
+// 화면 배율 배지를 누르면 배율 순환 (자동 → ×1 → ×5 → ×20 → ×50)
+document.getElementById('scaleBadge').addEventListener('click', () => {
+  const order = ['auto', '1', '5', '20', '50'];
+  const next = order[(order.indexOf(String(scaleMode)) + 1) % order.length];
+  document.querySelector(`#scaleControl button[data-scale="${next}"]`).click();
+});
+
+const btnSound = document.getElementById('btnSound');
+btnSound.addEventListener('click', () => {
+  soundEnabled = !soundEnabled;
+  btnSound.textContent = soundEnabled ? '🔊' : '🔇';
+});
+
+const helpModal = document.getElementById('helpModal');
+document.getElementById('btnHelp').addEventListener('click', () => helpModal.classList.add('open'));
+document.getElementById('btnCloseHelp').addEventListener('click', () => helpModal.classList.remove('open'));
+helpModal.addEventListener('click', (e) => { if (e.target === helpModal) helpModal.classList.remove('open'); });
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape') document.querySelectorAll('.modal-overlay.open').forEach(m => m.classList.remove('open')); });
+
+/* ─────────────────────────────────────────────────────────────
+   12. 카메라: 기본은 정면(단면) 시점, 빈 곳을 끌거나 [아이소뷰] 버튼으로 돌려 보기 + 휠 확대
+   - 패널·HUD가 가리지 않는 빈 영역에 다리·호수가 꽉 차도록 직교 투영 범위를 직접 맞춘다
+   ───────────────────────────────────────────────────────────── */
+const SECTION_VIEW = { az: 0, el: CAM_ELEV };          // 정면(단면)
+const ISO_VIEW = { az: Math.PI / 4, el: 0.62 };         // 아이소 (등각에 가깝게)
+const FIT_BOX = { x0: VIEW_BOX.x0, x1: VIEW_BOX.x1, y0: VIEW_BOX.y0, y1: VIEW_BOX.y1, z0: -0.6, z1: WORLD_FRONT };
+const camTarget = new THREE.Vector3((VIEW_BOX.x0 + VIEW_BOX.x1) / 2, (VIEW_BOX.y0 + VIEW_BOX.y1) / 2, 0);
+let camAz = SECTION_VIEW.az, camEl = SECTION_VIEW.el, userZoom = 1, camTween = null;
+function applyCamera() {
+  const ce = Math.cos(camEl);
+  camera.position.set(camTarget.x + camDist * Math.sin(camAz) * ce,
+                      camTarget.y + camDist * Math.sin(camEl),
+                      camTarget.z + camDist * Math.cos(camAz) * ce);
+  camera.up.set(0, 1, 0);
+  camera.lookAt(camTarget);
+}
+function isSectionView() { return Math.abs(camAz - SECTION_VIEW.az) < 0.01 && Math.abs(camEl - SECTION_VIEW.el) < 0.01; }
+// 지금(전환 중이면 도착할) 시점이 단면인가
+function headingToSection() {
+  return camTween ? (camTween.az1 === SECTION_VIEW.az && camTween.el1 === SECTION_VIEW.el) : isSectionView();
+}
+function setView(v) { camTween = { az0: camAz, el0: camEl, az1: v.az, el1: v.el, t: 0 }; updateViewButton(); }
+function stepCamTween(dt) {
+  if (!camTween) return;
+  const tw = camTween;
+  tw.t = Math.min(1, tw.t + dt / 0.7);
+  const k = tw.t < 0.5 ? 2 * tw.t * tw.t : 1 - Math.pow(-2 * tw.t + 2, 2) / 2;
+  camAz = tw.az0 + (tw.az1 - tw.az0) * k;
+  camEl = tw.el0 + (tw.el1 - tw.el0) * k;
+  if (tw.t >= 1) { camAz = tw.az1; camEl = tw.el1; camTween = null; }
+  updateProjection();
+  updateViewButton();
+  noteIsoView();
+}
+// 아이소뷰(또는 그만큼 돌린 시점)를 봤으면 미션 완료
+function noteIsoView() {
+  if (typeof completeMission === 'function' && (Math.abs(camAz) >= 0.5 || camEl >= 0.45)) completeMission('iso');
+}
+function updateViewButton() {
+  const b = document.getElementById('btnView');
+  if (b) b.textContent = headingToSection() ? '🧊 아이소뷰' : '📐 단면뷰';
+}
+document.getElementById('btnView').addEventListener('click', () => setView(headingToSection() ? ISO_VIEW : SECTION_VIEW));
+// 빈 곳 끌기 = 회전 (캔버스 포인터 처리에서 호출)
+function orbitBy(dx, dy) {
+  camTween = null;
+  camAz = Math.max(-1.25, Math.min(1.25, camAz - dx * 0.008));
+  camEl = Math.max(0.04, Math.min(1.25, camEl + dy * 0.006));
+  updateProjection();
+  updateViewButton();
+  noteIsoView();
+}
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  userZoom = Math.max(0.7, Math.min(2.5, userZoom * Math.exp(-e.deltaY * 0.0012)));
+  updateProjection();
+}, { passive: false });
+
+// 3D 장면을 보여줄 화면 영역 (HUD·패널·도크를 뺀 곳). HUD 위치용 CSS 변수도 여기서 갱신
+function sceneRect() {
+  const w = window.innerWidth, h = window.innerHeight;
+  const root = document.documentElement;
+  const top = document.querySelector('.hud-top').getBoundingClientRect();
+  root.style.setProperty('--hud-top-bottom', Math.round(top.bottom + 8) + 'px');
+  const sceneTop = Math.round(top.bottom + 10);
+  root.style.setProperty('--scene-top', sceneTop + 'px');
+  const bottom = document.getElementById('bottomBar').getBoundingClientRect();
+  root.style.setProperty('--bottom-h', Math.round(h - bottom.top + 10) + 'px');   // 하단 바 위쪽 여백 (미션 열·패널·토스트 기준)
+  const panel = document.querySelector('.side-panel').getBoundingClientRect();
+  if (w <= 820) {
+    root.style.setProperty('--scene-left', '8px');
+    root.style.setProperty('--scene-cx', '50%');
+    return { l: 8, r: w - 8, t: sceneTop + 4, b: Math.min(panel.top, bottom.top) - 4 };
+  }
+  const mission = document.getElementById('missionPanel').getBoundingClientRect();
+  const l = Math.round(mission.right + 14), r = Math.round(panel.left - 12);
+  root.style.setProperty('--scene-left', l + 'px');
+  root.style.setProperty('--scene-cx', Math.round((l + r) / 2) + 'px');
+  return { l, r, t: sceneTop + 4, b: bottom.top - 8 };
+}
+let lastSceneRect = null;
+// 화면 크기·레이아웃이 바뀔 때
+// 하중 제거·시편 교체 버튼: 넓은 화면은 오른쪽 패널 아래, 좁은 화면은 하단 부재 바
+let lastNarrowLayout = null;
+function placeActionButtons() {
+  const row = document.getElementById('actionRow');
+  const narrow = window.innerWidth <= 820;
+  const target = narrow ? document.getElementById('setupRow') : document.getElementById('panelFoot');
+  if (row.parentElement !== target) { if (narrow) target.appendChild(row); else target.insertBefore(row, target.firstChild); }
+  // 넓은 화면 ↔ 좁은 화면이 바뀌면 미션 카드도 그에 맞게 (넓으면 항상 펼친 열, 좁으면 접힌 카드)
+  if (narrow !== lastNarrowLayout) {
+    lastNarrowLayout = narrow;
+    let pref = null;
+    try { pref = localStorage.getItem('cantilever.missionCollapsed'); } catch (e) {}
+    setMissionCollapsed(narrow ? (pref !== null ? pref === '1' : true) : false, false);
+  }
+}
+function updateFrustum() {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  placeActionButtons();
+  lastSceneRect = sceneRect();
+  updateProjection();
+}
+// 시점·확대가 바뀔 때: FIT_BOX 를 지금 시점으로 투영해, 그 범위가 장면 영역에 꽉 차게
+function updateProjection() {
+  const w = window.innerWidth, h = window.innerHeight;
+  const R = lastSceneRect || (lastSceneRect = sceneRect());
+  const rw = Math.max(120, R.r - R.l), rh = Math.max(90, R.b - R.t);
+  applyCamera();
+  const ca = Math.cos(camAz), sa = Math.sin(camAz), ce = Math.cos(camEl), se = Math.sin(camEl);
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const x of [FIT_BOX.x0, FIT_BOX.x1]) for (const y of [FIT_BOX.y0, FIT_BOX.y1]) for (const z of [FIT_BOX.z0, FIT_BOX.z1]) {
+    const dx = x - camTarget.x, dy = y - camTarget.y, dz = z - camTarget.z;
+    const px = dx * ca - dz * sa;                    // 화면 오른쪽 방향 성분
+    const py = -dx * sa * se + dy * ce - dz * ca * se;   // 화면 위쪽 방향 성분
+    x0 = Math.min(x0, px); x1 = Math.max(x1, px); y0 = Math.min(y0, py); y1 = Math.max(y1, py);
+  }
+  const u = Math.max((x1 - x0) / rw, (y1 - y0) / rh) / userZoom;   // 화면 1px 당 m
+  const cxw = (x0 + x1) / 2, cyw = (y0 + y1) / 2;
+  const cx = (R.l + R.r) / 2, cy = (R.t + R.b) / 2;
+  camera.left = cxw - cx * u;
+  camera.right = camera.left + w * u;
+  camera.top = cyw + cy * u;
+  camera.bottom = camera.top - h * u;
+  camera.zoom = 1;
+  camera.updateProjectionMatrix();
+  // 먼 배경 그림은 단면 시점에서만 (돌리면 서서히 사라짐)
+  const f = Math.max(0, Math.min(1, 1 - Math.abs(camAz) / 0.3 - Math.max(0, camEl - CAM_ELEV) / 0.3));
+  backdrop.material.opacity = f;
+  backdrop.visible = f > 0.01;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   13. 메인 렌더 루프
+   ───────────────────────────────────────────────────────────── */
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  stepCamTween(dt);
+  const tNow = clock.elapsedTime;
+  lilyPads.forEach((pad, i) => { pad.position.y = WATER_Y + 0.02 + Math.sin(tNow * 1.4 + i * 1.7) * 0.012; });
+  for (let i = splashDrops.length - 1; i >= 0; i--) {
+    const d = splashDrops[i], u = d.userData;
+    u.vy -= 9.8 * dt;
+    d.position.x += u.vx * dt; d.position.y += u.vy * dt; d.position.z += u.vz * dt;
+    if (d.position.y < WATER_Y) { splashGroup.remove(d); splashDrops.splice(i, 1); }
+  }
+  for (let i = ripples.length - 1; i >= 0; i--) {
+    const r = ripples[i];
+    r.userData.life -= dt * 0.8;
+    r.scale.setScalar(1 + (1 - r.userData.life) * 3.5);
+    r.material.opacity = 0.7 * Math.max(0, r.userData.life);
+    if (r.userData.life <= 0) { splashGroup.remove(r); r.material.dispose(); ripples.splice(i, 1); }
+  }
+
+  for (let i = activePuffs.length - 1; i >= 0; i--) {
+    const p = activePuffs[i];
+    p.userData.life -= dt * 2.5;
+    p.position.x += p.userData.vx * dt;
+    p.position.y += p.userData.vy * dt;
+    p.position.z += p.userData.vz * dt;
+    p.scale.multiplyScalar(0.92);
+    if (p.userData.life <= 0) { puffGroup.remove(p); p.geometry.dispose(); activePuffs.splice(i, 1); }
+  }
+
+  if (isBroken) {
+    // 끊어진 보와 하중물은 호수로 떨어져 첨벙! 물속에서는 천천히 가라앉아 바닥에 멈춘다
+    debrisGroup.children.forEach(d => stepFalling(d, d.userData, 0.12, 0.13, dt));
+    characters.forEach(c => { if (!c.onBeam && c.mesh) stepFalling(c.mesh, c, 0.18, 0, dt); });
+  }
+
+  // 착지 스쿼시 (잠깐 눌렸다가 원래 크기로)
+  characters.forEach(c => {
+    if (c.onBeam && c.squashTimer > 0) {
+      c.squashTimer = Math.max(0, c.squashTimer - dt * 3.5);
+      const s = 1.0 + Math.sin(c.squashTimer * Math.PI) * 0.15;
+      const k = c.baseScale || 1;
+      c.mesh.scale.set(k / s, k * s, k / s);
+    }
+  });
+
+  renderer.render(scene, camera);
+}
+
+window.addEventListener('resize', () => {
+  updateFrustum();
+  drawCurveChart();
+  drawBMD();
+});
+
+/* ─────────────────────────────────────────────────────────────
+   14. 실험 미션 (게임 요소: 핵심 개념 5가지를 직접 확인하게 유도)
+   ───────────────────────────────────────────────────────────── */
+// 미션 목록 (순서대로 표시). pts = 완료 점수, note = 완료 때 보여줄 한 줄 설명
+const MISSIONS = [
+  { key: 'first',    pts: 50,  icon: '📦', text: '하중물 하나를 다리 위에 올리기', note: '시작! 올린 하중의 무게 P 와 위치 x 가 고정단 모멘트 M = P·x 를 만듭니다.' },
+  { key: 'move',     pts: 50,  icon: '↔️', text: '올려둔 하중물을 끌어서 옮기기', note: '위치만 바꿔도 M 이 바뀝니다. 벽에서 멀수록 M = P·x 가 커져요.' },
+  { key: 'lever',    pts: 150, icon: '📏', text: '<b>중장비</b>를 벽 가까이(x ≤ 2 m)와 끝단(x ≥ 5 m)에 두고 M 비교하기', note: 'M = P·x: 같은 무게라도 벽에서 멀수록 모멘트가 커집니다.' },
+  { key: 'yield',    pts: 100, icon: '📈', text: '<b>연강</b> 보를 항복시키기 (σ &gt; σ_y, 선도의 점이 꺾인 구간으로)', note: '항복: σ-ε 선도의 직선 구간을 벗어나면 소성 변형이 시작됩니다.' },
+  { key: 'residual', pts: 150, icon: '🔩', text: '항복시킨 <b>연강</b> 보의 하중을 빼서 <b>영구 처짐</b> 남기기', note: '소성: 항복을 넘었던 부분은 하중을 빼도 돌아오지 않습니다 (잔류변형률).' },
+  { key: 'rubber',   pts: 150, icon: '🟡', text: '<b>고무</b> 보를 1 m 넘게 휘게 했다가 하중을 빼서 <b>완전 복원</b>시키기', note: '탄성: 아무리 크게 휘어도 항복하지 않았다면 100% 복원됩니다.' },
+  { key: 'brittle',  pts: 150, icon: '🧱', text: '<b>콘크리트</b> 보를 깨뜨려 취성 파괴 보기', note: '취성 파괴: 경고 없이 한 번에 깨졌죠? 콘크리트에 철근을 넣는 이유입니다.' },
+  { key: 'wood',     pts: 100, icon: '🪵', text: '<b>목재</b> 보도 깨뜨려 콘크리트와 비교하기', note: '목재는 잘 휘지만 소성 없이 한계에서 쪼개지는 취성 재료입니다.' },
+  { key: 'ductile',  pts: 150, icon: '💥', text: '<b>강재</b> 보를 크게 휘게 한 뒤 끊어지게 하기 (연성 파괴)', note: '연성 파괴: 크게 휘며 버티다 끊어져 붕괴 전에 경고를 줍니다.' },
+  { key: 'thick',    pts: 200, icon: '📐', text: '<b>강재</b> 보가 항복한 상태에서 <b>두께 h</b>를 키워 σ &lt; σ_y 로 만들기', note: '단면의 힘: h를 키우면 S ∝ h² 로 커져 같은 하중에서 응력이 줄어듭니다.' },
+  { key: 'iso',      pts: 30,  icon: '🧊', text: '화면을 돌려 <b>아이소뷰</b>로 다리 보기', note: '시점을 돌려도 수치는 같습니다. 절벽과 호수 깊이가 보이죠?' },
+  { key: 'learn',    pts: 50,  icon: '🔍', text: 'σ-ε 선도를 눌러 <b>단면계수</b> 개념 페이지 읽기', note: 'σ = M/S, S = bh²/6. 두께가 응력을 줄이는 이유를 알았어요.' }
+];
+const MISSION_TOTAL = MISSIONS.reduce((a, m) => a + m.pts, 0);
+const missions = {};
+MISSIONS.forEach(m => { missions[m.key] = false; });
+const missionFlags = { rubberBig: false, leverNear: false, leverFar: false };
+let score = 0;
+
+const MISSION_HOW = {
+  first: '아래 도크의 하중물을 다리 위로 끌어 놓거나 클릭하세요.',
+  move: '다리 위 하중물을 잡고 왼쪽·오른쪽으로 0.3 m 이상 끌어 옮기세요.',
+  lever: '중장비(5,000 kg)를 1~2 m 구간에 놓았다가 5 m 밖으로 끌어 보세요 (연강·두께 28 cm면 둘 다 버팁니다).',
+  yield: '연강 보(두께 28 cm)에 중장비 3개를 끝단 쪽(5.5·4.5·3.5 m)에 올리면 σ/σ_y 가 100% 를 넘습니다.',
+  residual: '항복시킨 연강 보에서 [❌ 하중 전부 제거]를 눌러 δ_p 가 남는지 보세요.',
+  rubber: '고무 보 끝단에 시험추(100 kg) 하나만 올려도 1 m 넘게 휩니다. 그 뒤 하중을 전부 빼세요.',
+  brittle: '콘크리트 보에 적재블록(500 kg)을 끝단에 올리면 바로 깨집니다.',
+  wood: '목재 보 끝단에 중장비(5,000 kg)를 올리면 깨집니다 (차량 1,500 kg 은 한계 근처에서 버팁니다).',
+  ductile: '연강 보에 중장비 3개를 올려 항복시킨 뒤(σ > σ_y), 두께 슬라이더를 23 cm 이하로 줄이면 크게 휘다 끊어집니다.',
+  thick: '연강이 항복한 상태(σ > σ_y)에서 두께 슬라이더를 오른쪽으로 밀어 σ < σ_y 로 만드세요.',
+  iso: '오른쪽 위 [🧊 아이소뷰] 버튼을 누르거나 화면 빈 곳을 끌어 돌리세요.',
+  learn: '오른쪽 σ-ε 선도 카드를 클릭하세요.'
+};
+function renderMissionList() {
+  const ul = document.getElementById('missionList');
+  const nextKey = (MISSIONS.find(m => !missions[m.key]) || {}).key;
+  ul.innerHTML = MISSIONS.map(m =>
+    `<li data-m="${m.key}" class="${missions[m.key] ? 'done' : (m.key === nextKey ? 'next' : '')}" title="${(MISSION_HOW[m.key] || '').replace(/"/g, '&quot;')}"><span class="ck"></span><span class="tx">${m.icon} ${m.text}</span>${m.key === nextKey && !missions[m.key] ? '<span class="nx">다음</span>' : ''}<span class="pt">+${m.pts}</span></li>`
+  ).join('');
+}
+// 미션을 누르면 하는 법을 토스트로 알려줌
+document.getElementById('missionList').addEventListener('click', (e) => {
+  const li = e.target.closest('li[data-m]'); if (!li) return;
+  const m = MISSIONS.find(x => x.key === li.dataset.m); if (!m) return;
+  showToast(`${m.icon} ${missions[m.key] ? '완료한 미션: ' : '하는 법: '}${MISSION_HOW[m.key] || ''}`, 'normal');
+});
+function missionsDone() { return MISSIONS.filter(m => missions[m.key]).length; }
+function refreshScore(bump) {
+  score = MISSIONS.reduce((a, m) => a + (missions[m.key] ? m.pts : 0), 0);
+  const n = missionsDone();
+  document.getElementById('missionCnt').textContent = `${n} / ${MISSIONS.length}`;
+  document.getElementById('scoreVal').textContent = score.toLocaleString();
+  document.getElementById('scoreMini').textContent = `${score.toLocaleString()}점`;
+  document.getElementById('missionBar').style.width = `${(score / MISSION_TOTAL) * 100}%`;
+  const sb = document.getElementById('scoreBadge');
+  sb.textContent = `🏆 ${score.toLocaleString()} 점`;
+  if (bump) { sb.classList.remove('bump'); void sb.offsetWidth; sb.classList.add('bump'); }
+}
+function completeMission(key) {
+  if (missions[key]) return;
+  const m = MISSIONS.find(x => x.key === key);
+  if (!m) return;
+  missions[key] = true;
+  const li = document.querySelector(`#missionList li[data-m="${key}"]`);
+  if (li) { li.classList.add('done'); li.classList.remove('just'); void li.offsetWidth; li.classList.add('just'); }
+  refreshScore(true);
+  renderMissionList();   // '다음' 표시 이동
+  const li2 = document.querySelector(`#missionList li[data-m="${key}"]`); if (li2) li2.classList.add('just');
+  scorePop(m.pts);
+  const n = missionsDone();
+  playSound('recover');
+  const note = document.getElementById('missionNote');
+  note.textContent = `✨ +${m.pts}점 — ${m.note}` + (n === MISSIONS.length ? ' 🏆 모든 미션 완료!' : '');
+  note.style.display = 'block';
+  const card = document.getElementById('missionPanel');
+  if (window.innerWidth > 820) setMissionCollapsed(false);
+  card.classList.remove('flash'); void card.offsetWidth; card.classList.add('flash');
+  showToast(`🎯 미션 완료 +${m.pts}점 · ${m.icon} ${m.text.replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')}`, 'success');
+  try { localStorage.setItem('cantilever.missions', JSON.stringify(missions)); } catch (e) {}
+}
+function scorePop(pts) {
+  const sb = document.getElementById('scoreBadge');
+  const r = sb && getComputedStyle(sb).display !== 'none' ? sb.getBoundingClientRect() : document.getElementById('missionHead').getBoundingClientRect();
+  const el = document.createElement('div');
+  el.className = 'score-pop'; el.textContent = `+${pts}`;
+  const stack = document.querySelectorAll('.score-pop').length;   // 동시 완료(+50, +150) 는 아래로 층층이 (위로 쌓으면 화면 밖으로 잘림, review_18)
+  el.style.left = (r.left + r.width / 2) + 'px'; el.style.top = Math.max(8, r.top - 4 + stack * 28) + 'px';
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 1200);
+}
+function checkMissions(evt) {
+  const k = currentMatKey;
+  const m = currentMat;
+  const n = loadsOnBeam().length;
+  if (n > 0 || (isBroken && failSnap && failSnap.count > 0)) completeMission('first');
+  if (isBroken && k === 'concrete') completeMission('brittle');
+  if (isBroken && k === 'wood') completeMission('wood');
+  if (isBroken && failureMode === 'ductile' && (k === 'mild_steel' || k === 'high_steel')) completeMission('ductile');
+  if (!isBroken && k === 'mild_steel' && currentMaxStress > m.fy) completeMission('yield');
+  if (!isBroken && k === 'mild_steel' && currentPermanent > 0.05 && n === 0) completeMission('residual');
+  if (!isBroken && k === 'rubber') {
+    if (currentDeflection >= 100) missionFlags.rubberBig = true;
+    if (missionFlags.rubberBig && n === 0 && currentDeflection < 0.01) completeMission('rubber');
+  }
+  if (!isBroken) {
+    loadsOnBeam().forEach(c => {
+      if (c.type !== 'heavy') return;
+      if (c.xPos <= 2.0) missionFlags.leverNear = true;
+      if (c.xPos >= 5.0) missionFlags.leverFar = true;
+    });
+    if (missionFlags.leverNear && missionFlags.leverFar) completeMission('lever');
+  }
+}
+// 미션 카드 접기/펼치기 상태를 한 곳에서 관리 (aria-expanded 동기화)
+function setMissionCollapsed(collapsed, remember) {
+  document.getElementById('missionPanel').classList.toggle('collapsed', collapsed);
+  document.getElementById('missionHead').setAttribute('aria-expanded', String(!collapsed));
+  if (remember) { try { localStorage.setItem('cantilever.missionCollapsed', collapsed ? '1' : '0'); } catch (e) {} }
+}
+document.getElementById('missionHead').addEventListener('click', () => {
+  setMissionCollapsed(!document.getElementById('missionPanel').classList.contains('collapsed'), true);
+});
+
+// 초기화: 좁은 화면에서는 접어 두고, 넓은 화면은 항상 펼친 세로 열
+(function initMissionCard() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('cantilever.missions') || 'null');
+    if (saved && typeof saved === 'object') MISSIONS.forEach(m => { if (saved[m.key] === true) missions[m.key] = true; });
+  } catch (e) {}
+  renderMissionList();
+  refreshScore(false);
+  lastNarrowLayout = null;
+  placeActionButtons();   // 화면 폭에 맞춰 접기/펼치기 결정
+})();
+function resetMissions() {
+  MISSIONS.forEach(m => { missions[m.key] = false; });
+  missionFlags.rubberBig = false; missionFlags.leverNear = false; missionFlags.leverFar = false;
+  try { localStorage.removeItem('cantilever.missions'); } catch (e) {}
+  renderMissionList();
+  refreshScore(false);
+  document.getElementById('missionNote').style.display = 'none';
+}
+
+/* ─────────────────────────────────────────────────────────────
+   15. 개념 페이지 (σ-ε 선도 클릭) · 실험 종료 · 랭킹
+   ───────────────────────────────────────────────────────────── */
+const conceptModal = document.getElementById('conceptModal');
+function updateConceptLive() {
+  const box = document.getElementById('conceptLive');
+  if (!box) return;
+  // 파괴 후에는 임계 순간의 단면(두께 감소 파괴면 h_cr) 기준 — 표·formula-strip 과 같은 값
+  const snapS = (isBroken && failSnap && failSnap.S) ? failSnap.S : null;
+  const Hm = snapS ? Math.sqrt(6 * snapS / BEAM_B) : BEAM_H;
+  const b = BEAM_B * 100, h = Hm * 100;
+  const S = (snapS || BEAM_S) * 1e6, I = (BEAM_B * Math.pow(Hm, 3) / 12) * 1e8;
+  const M = currentMaxMoment;   // kN·m (파괴 후에는 임계 순간의 M)
+  const sig = S > 0 ? (M * 1e3) / (S * 1e-6) / 1e6 : 0;   // MPa
+  const hTxt = snapS && Math.abs(Hm - BEAM_H) > 5e-4 ? `${h.toFixed(1)} cm (파괴 임계 두께 · 슬라이더는 ${Math.round(BEAM_H * 100)} cm)` : `${h.toFixed(0)} cm`;
+  box.innerHTML = `b = ${b.toFixed(0)} cm, h = ${hTxt}<br>` +
+    `I = b·h³/12 = ${Math.round(I).toLocaleString()} cm⁴<br>` +
+    `S = b·h²/6 = <b>${Math.round(S).toLocaleString()} cm³</b><br>` +
+    (M > 0 ? `M = ${M.toFixed(1)} kN·m${isBroken ? ' (임계 순간)' : ''} → σ = M/S = <b>${sig.toFixed(1)} MPa</b> (${currentMat.name} ${terms().sym} = ${currentMat.fy} MPa, σ_u = ${currentMat.fu} MPa)` : '하중을 올리면 σ = M/S 가 여기 계산됩니다.');
+}
+function openConcept() {
+  updateConceptLive();
+  conceptModal.classList.add('open');
+  completeMission('learn');
+}
+document.getElementById('curveCard').addEventListener('click', openConcept);
+document.getElementById('curveCard').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openConcept(); } });
+document.getElementById('btnCloseConcept').addEventListener('click', () => conceptModal.classList.remove('open'));
+document.getElementById('btnConceptOk').addEventListener('click', () => conceptModal.classList.remove('open'));
+conceptModal.addEventListener('click', (e) => { if (e.target === conceptModal) conceptModal.classList.remove('open'); });
+
+// 랭킹: 이 브라우저(localStorage)에 저장. 배포 때 서버 랭킹으로 바꾸려면 RANKING_ENDPOINT 에 POST/GET 주소를 넣는다
+const RANKING_KEY = 'cantilever.ranking';
+const RANKING_ENDPOINT = null;
+const endModal = document.getElementById('endModal');
+function loadRanking() {
+  try { const r = JSON.parse(localStorage.getItem(RANKING_KEY) || '[]'); return Array.isArray(r) ? r : []; } catch (e) { return []; }
+}
+function saveRanking(list) { try { localStorage.setItem(RANKING_KEY, JSON.stringify(list)); } catch (e) {} }
+function gradeFor(s) {
+  const r = s / MISSION_TOTAL;
+  if (r >= 0.999) return '🏆 마스터 엔지니어';
+  if (r >= 0.75) return '🥇 수석 엔지니어';
+  if (r >= 0.5) return '🥈 책임 엔지니어';
+  if (r >= 0.25) return '🥉 주니어 엔지니어';
+  return '🔰 견습 엔지니어';
+}
+const RANKING_KEEP = 50;   // 저장 건수 (상위 10 표시)
+function sortedRanking() { return loadRanking().slice().sort((a, b) => b.score - a.score || a.t - b.t); }
+function renderRanking(highlightId) {
+  const box = document.getElementById('rankBox');
+  const all = sortedRanking();
+  const list = all.slice(0, 10);
+  if (!list.length) { box.innerHTML = '<div class="rank-empty">아직 등록된 점수가 없습니다. 이름을 적고 [랭킹 등록]을 눌러 보세요.</div>'; return; }
+  const medal = ['🥇', '🥈', '🥉'];
+  const row = (r, i) => `<tr class="${r.id === highlightId ? 'me' : ''}"><td class="medal">${medal[i] || (i + 1)}</td><td>${escapeHtml(r.name)}</td><td class="r">${r.score.toLocaleString()}</td><td class="r">${r.done}/${MISSIONS.length}</td><td>${r.date}</td></tr>`;
+  let html = '<table class="rank-table"><tr><th>순위</th><th>이름</th><th style="text-align:right">점수</th><th style="text-align:right">미션</th><th>날짜</th></tr>' + list.map(row).join('');
+  const myIdx = highlightId ? all.findIndex(r => r.id === highlightId) : -1;
+  if (myIdx >= 10) html += `<tr><td colspan="5" style="text-align:center;color:#a4b0be">⋯</td></tr>` + row(all[myIdx], myIdx);   // 11위 밖이면 내 행을 따로
+  box.innerHTML = html + '</table>';
+}
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function openEnd() {
+  document.getElementById('endScore').textContent = score.toLocaleString();
+  document.getElementById('endSub').textContent = `미션 ${missionsDone()} / ${MISSIONS.length} 완료 · 만점 ${MISSION_TOTAL.toLocaleString()}점`;
+  document.getElementById('endGrade').textContent = gradeFor(score);
+  document.getElementById('endDone').innerHTML = MISSIONS.map(m => `<span class="${missions[m.key] ? '' : 'no'}">${m.icon} ${missions[m.key] ? '+' + m.pts : '—'}</span>`).join('');
+  let nm = '';
+  try { nm = localStorage.getItem('cantilever.playerName') || ''; } catch (e) {}
+  document.getElementById('rankName').value = nm;
+  renderRanking(null);
+  endModal.classList.add('open');
+  setTimeout(() => document.getElementById('rankName').focus(), 50);
+}
+let lastRankId = null;
+function submitRanking() {
+  const name = document.getElementById('rankName').value.trim().slice(0, 12) || '이름없음';
+  try { localStorage.setItem('cantilever.playerName', name); } catch (e) {}
+  const now = new Date();
+  const entry = { id: `${now.getTime()}_${Math.floor(Math.random() * 1e6)}`, name, score, done: missionsDone(), t: now.getTime(),
+    date: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}` };
+  const list = loadRanking();
+  list.push(entry);
+  const sorted = list.sort((a, b) => b.score - a.score || a.t - b.t);
+  const rank = sorted.findIndex(r => r.id === entry.id) + 1;      // 저장 전 전체 순위
+  saveRanking(sorted.slice(0, RANKING_KEEP));
+  lastRankId = entry.id;
+  renderRanking(entry.id);
+  if (rank > RANKING_KEEP) showToast(`📝 ${name}: ${score.toLocaleString()}점 — 상위 ${RANKING_KEEP}위 안에 들지 못해 저장되지 않았어요 (${rank}위)`, 'warning');
+  else showToast(`📝 ${name}: ${score.toLocaleString()}점 등록 · 현재 ${rank}위`, 'success');
+  if (RANKING_ENDPOINT) { try { fetch(RANKING_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) }); } catch (e) {} }
+  return entry;
+}
+document.getElementById('btnEnd').addEventListener('click', openEnd);
+document.getElementById('btnCloseEnd').addEventListener('click', () => endModal.classList.remove('open'));
+document.getElementById('btnEndContinue').addEventListener('click', () => endModal.classList.remove('open'));
+document.getElementById('btnRankSave').addEventListener('click', submitRanking);
+document.getElementById('rankName').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitRanking(); });
+document.getElementById('btnEndRestart').addEventListener('click', () => {
+  endModal.classList.remove('open');
+  resetMissions();
+  invalidateLoadPlans();
+  resetExperiment();
+  showToast('🔄 점수와 미션을 초기화하고 처음부터 시작합니다.', 'normal');
+});
+endModal.addEventListener('click', (e) => { if (e.target === endModal) endModal.classList.remove('open'); });
+// 번외: 재료 칩에 보 색 점, 키보드 단축키
+document.querySelectorAll('.mat-btn').forEach(b => {
+  const sw = document.createElement('span'); sw.className = 'sw';
+  sw.style.background = '#' + MATERIALS[b.dataset.mat].color.toString(16).padStart(6, '0');
+  b.insertBefore(sw, b.firstChild);
+});
+window.addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+  if (isDragging || moveDrag || orbitDrag) return;   // 하중 끌기·이동·카메라 회전 중에는 단축키 무시 (review_17 P2-2)
+  const tag = (e.target && e.target.tagName) || '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || document.querySelector('.modal-overlay.open')) return;
+  const spawn = { '1': 'spawnWeight100', '2': 'spawnBlock500', '3': 'spawnWorker', '4': 'spawnCar', '5': 'spawnHeavy' }[e.key];
+  if (spawn) { document.getElementById(spawn).click(); return; }
+  const k = e.key.toLowerCase();
+  if (k === 'u') document.getElementById('btnUnload').click();
+  else if (k === 'r') document.getElementById('btnReset').click();
+  else if (k === 'v') document.getElementById('btnView').click();
+  else if (k === 'g') document.getElementById('btnHelp').click();
+});
+applyCamera();
+updateFrustum();
+resetExperiment();
+// HUD 크기가 바뀌면(글꼴 로딩·상태 배지 줄바꿈 등) 3D 영역과 그래프를 다시 맞춘다
+if (window.ResizeObserver) {
+  const ro = new ResizeObserver(() => { updateFrustum(); drawCurveChart(); drawBMD(); });
+  ro.observe(document.querySelector('.hud-top'));
+  ro.observe(document.getElementById('bottomBar'));
+  ro.observe(document.getElementById('sidePanel'));
+  ro.observe(document.getElementById('missionPanel'));
+}
+animate();
+</script>
+</body>
+</html>
