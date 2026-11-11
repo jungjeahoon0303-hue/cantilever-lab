@@ -673,8 +673,8 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-s
       <small>끌어서 다리 위에</small>
     </div>
     <button type="button" class="spawner-card" id="spawnWorker">
-      <span class="spawner-icon">🧍</span>
-      <span class="spawner-info"><span class="spawner-name">작업자</span><span class="spawner-weight">75 kg</span></span>
+      <span class="spawner-icon">🧑‍🌾</span>
+      <span class="spawner-info"><span class="spawner-name">농부</span><span class="spawner-weight">75 kg</span></span>
     </button>
     <button type="button" class="spawner-card" id="spawnPig">
       <span class="spawner-icon">🐷</span>
@@ -982,7 +982,7 @@ const MATERIALS = {
     brittle: false,
     isRubber: true,
     limitName: '탄성 선형한계',
-    description: '탄성계수가 매우 작아 작업자 한 명에도 크게 휘지만, 소성이 없어 하중을 빼면 완전히 복원됩니다. (화면은 실제 비율 ×1)'
+    description: '탄성계수가 매우 작아 농부 한 명에도 크게 휘지만, 소성이 없어 하중을 빼면 완전히 복원됩니다. (화면은 실제 비율 ×1)'
   }
 };
 
@@ -1768,6 +1768,9 @@ function createVoxelCar() {
 
   return carGroup;
 }
+
+/* 옆모습으로 만든 하중물을 돌려 관객 쪽을 보게 한다 (농부처럼 앞모습이 보이도록) */
+function faceFront(g) { g.rotation.y = -Math.PI / 2; return g; }
 
 /* 돼지 150 kg · 소 500 kg · 트랙터 1,500 kg: 건너요 친구들처럼 큼직한 복셀 캐릭터 */
 function vxBox(g, w, h, d, color, x, y, z, shadow = true) {
@@ -2730,11 +2733,11 @@ function drawBMD() {
 
 /* 하중 목록: 각 하중의 P·x 기여분을 보여줘 M = ΣP·x 를 체감 */
 const LOAD_TYPES = {
-  worker:    { name: '작업자', icon: '🧍', weight: 75, len: 0.32, make: () => createVoxelEngineer() },
-  pig:       { name: '돼지', icon: '🐷', weight: 150, len: 0.34, make: () => createVoxelPig() },
-  cow:       { name: '소', icon: '🐮', weight: 500, len: 0.52, make: () => createVoxelCow() },
-  tractor:   { name: '트랙터', icon: '🚜', weight: 1500, len: 0.76, make: () => createVoxelTractor() },
-  excavator: { name: '포크레인', icon: '🏗️', weight: 5000, len: 0.86, make: () => createVoxelHeavy() }
+  worker:    { name: '농부', icon: '🧑‍🌾', weight: 75, len: 0.32, make: () => createVoxelEngineer() },
+  pig:       { name: '돼지', icon: '🐷', weight: 150, len: 0.34, make: () => faceFront(createVoxelPig()) },
+  cow:       { name: '소', icon: '🐮', weight: 500, len: 0.52, make: () => faceFront(createVoxelCow()) },
+  tractor:   { name: '트랙터', icon: '🚜', weight: 1500, len: 0.76, make: () => faceFront(createVoxelTractor()) },
+  excavator: { name: '포크레인', icon: '🏗️', weight: 5000, len: 0.86, make: () => faceFront(createVoxelHeavy()) }
 };
 
 function renderLoadList() {
@@ -3101,6 +3104,12 @@ canvas.addEventListener('pointerup', () => {
   }
 });
 canvas.addEventListener('pointercancel', () => { moveDrag = null; orbitDrag = null; hideMoveCaption(); });
+// 더블클릭(두 번 탭): 그 하중물을 삭제
+canvas.addEventListener('dblclick', (e) => {
+  if (isBroken) return;
+  const c = pickLoadAt(e.clientX, e.clientY);
+  if (c) removeLoadById(c.id);
+});
 
 function hideFirstHint() {
   const h = document.getElementById('firstHint');
@@ -3167,8 +3176,8 @@ document.getElementById('btnWhyRetry').addEventListener('click', () => document.
 document.getElementById('btnWhyOk').addEventListener('click', hideWhy);
 document.getElementById('btnCloseWhy').addEventListener('click', hideWhy);
 document.getElementById('btnRestart').addEventListener('click', () => {
-  hideWhy(); resetMissions(); invalidateLoadPlans(); resetExperiment();
-  showToast('🔁 처음부터 다시 시작합니다. 점수도 0점부터예요.', 'normal');
+  hideWhy(); invalidateLoadPlans(); resetExperiment();   // 점수는 그대로 적립된다 (처음부터는 종료 창에서)
+  showToast(`🔁 새 시편으로 다시 시작합니다. 점수 ${score.toLocaleString()}점은 그대로 쌓여요.`, 'normal');
 });
 document.getElementById('btnStart').addEventListener('click', () => {
   unlockAudio(); startBgm();
@@ -3860,7 +3869,8 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {          // 선택한 하중물 옮기기 (길게 누르면 계속)
     if (selectedLoadId === null || isDragging || moveDrag) return;
     e.preventDefault();
-    moveSelectedBy(e.key === 'ArrowLeft' ? -0.05 : 0.05);
+    const step = e.shiftKey ? 0.2 : 0.05;   // 쉬프트를 누르면 빠르게
+    moveSelectedBy(e.key === 'ArrowLeft' ? -step : step);
     return;
   }
   if ((e.key === 'Delete' || e.key === 'Backspace') && selectedLoadId !== null) {

@@ -847,7 +847,7 @@ async def main():
                 await ev(ws, 586, "btnWhyRetry.click(); 0")
                 re = json.loads(await ev(ws, 587, "JSON.stringify({show: whyModal.classList.contains('open'), broken: isBroken, loads: loadsOnBeam().length, score})"))
                 print(f"After retry: {re}")
-                assert not re["show"] and not re["broken"] and re["loads"] == 0 and re["score"] == 0, re
+                assert not re["show"] and not re["broken"] and re["loads"] == 0 and re["score"] == 200, re   # 점수는 적립 유지
                 await ev(ws, 588, "spawnCharacterAt('cow', 1.0); 0")
                 assert await ev(ws, 589, "missions.first") is True, "new run can earn points again"
                 await ev(ws, 590, "resetMissions(); resetExperiment(); 0")
@@ -927,7 +927,7 @@ async def main():
             if await ev(ws, 650, "typeof selectLoad === 'function' && typeof openWhy === 'function'") is True:
                 order = await ev(ws, 651, "JSON.stringify([...document.querySelectorAll('#dockBar .spawner-card')].map(b => b.querySelector('.spawner-name').textContent + ' ' + b.querySelector('.spawner-weight').textContent))")
                 print(f"Dock order: {order}")
-                assert order == '["작업자 75 kg","돼지 150 kg","소 500 kg","트랙터 1,500 kg","포크레인 5,000 kg"]', order
+                assert order == '["농부 75 kg","돼지 150 kg","소 500 kg","트랙터 1,500 kg","포크레인 5,000 kg"]', order
                 fs = await ev(ws, 652, "parseFloat(getComputedStyle(document.querySelector('.readout-table td.val')).fontSize)")
                 assert fs >= 16, f"readout value font {fs}px"
                 await ev(ws, 653, "resetMissions(); resetExperiment(); spawnCharacterAt('pig', 3.0); 0")
@@ -965,12 +965,37 @@ async def main():
                 assert rr["inside"], rr
                 await ev(ws, 676, "btnRestart.click(); 0")
                 st = json.loads(await ev(ws, 677, "JSON.stringify({b: isBroken, n: loadsOnBeam().length, score, open: whyModal.classList.contains('open')})"))
-                assert not st["b"] and st["n"] == 0 and st["score"] == 0 and not st["open"], st
+                assert not st["b"] and st["n"] == 0 and st["score"] > 0 and not st["open"], st   # 다시하기: 점수 적립 유지
                 # 배경음악: 표지를 넘기면 재생 시작
                 bg = await ev(ws, 678, "bgmTimer !== null && bgmGain !== null")
                 assert bg is True, "background music should start with the game"
                 print("Restart, why window, music, dock order: ok")
                 await ev(ws, 679, "resetMissions(); resetExperiment(); 0")
+
+            # 49. (번외) 쉬프트+방향키는 빠르게 (0.2 m), 더블클릭은 하중물 삭제
+            if await ev(ws, 700, "typeof selectLoad === 'function'") is True:
+                await ev(ws, 701, "hideWhy(); resetMissions(); resetExperiment(); spawnCharacterAt('worker', 3.0); 0")
+                cid = await ev(ws, 702, "loadsOnBeam()[0].id")
+                await ev(ws, 703, f"selectLoad({cid}); 0")
+                x0 = await ev(ws, 704, "loadsOnBeam()[0].xPos")
+                await send_cmd(ws, 705, "Input.dispatchKeyEvent", {"type": "keyDown", "key": "ArrowLeft", "code": "ArrowLeft", "windowsVirtualKeyCode": 37, "modifiers": 8})
+                await send_cmd(ws, 706, "Input.dispatchKeyEvent", {"type": "keyUp", "key": "ArrowLeft", "code": "ArrowLeft", "windowsVirtualKeyCode": 37, "modifiers": 8})
+                x1 = await ev(ws, 707, "loadsOnBeam()[0].xPos")
+                print(f"Shift arrow: {x0:.2f} -> {x1:.2f}")
+                assert abs((x0 - x1) - 0.2) < 1e-6, (x0, x1)
+                # 앞모습: 모든 하중물의 자기 방향 회전이 관객(+z) 쪽을 향하는지
+                fr = json.loads(await ev(ws, 708, "JSON.stringify(['worker','pig','cow','tractor','excavator'].map(t => { const g = LOAD_TYPES[t].make(); const r = Math.abs(((g.rotation.y % (2*Math.PI)) + 2*Math.PI) % (2*Math.PI) - 3*Math.PI/2) < 1e-6 || Math.abs(g.rotation.y + Math.PI/2) < 1e-6 || g.rotation.y === 0; return [t, +g.rotation.y.toFixed(3), r]; }))"))
+                print(f"Facing: {fr}")
+                # 더블클릭: 가운데 하중물 위에서 두 번 클릭 → 삭제
+                cc = json.loads(await ev(ws, 709, "JSON.stringify((() => { const c = loadsOnBeam()[0]; const cr = canvas.getBoundingClientRect(); const v = new THREE.Box3().setFromObject(c.mesh).getCenter(new THREE.Vector3()).project(camera); return [cr.left + (v.x + 1) / 2 * cr.width, cr.top + (1 - v.y) / 2 * cr.height]; })())"))
+                for k, typ in enumerate(["mousePressed", "mouseReleased", "mousePressed", "mouseReleased"]):
+                    await send_cmd(ws, 710 + k, "Input.dispatchMouseEvent", {"type": typ, "x": cc[0], "y": cc[1], "button": "left", "buttons": 1 if typ == "mousePressed" else 0, "clickCount": 1 if k < 2 else 2})
+                    await asyncio.sleep(0.08)
+                await asyncio.sleep(0.3)
+                n = await ev(ws, 720, "loadsOnBeam().length")
+                print(f"After double click: {n} loads")
+                assert n == 0, n
+                await ev(ws, 721, "resetMissions(); resetExperiment(); 0")
 
             errors = [e for e in EVENTS if e["method"] == "Runtime.exceptionThrown"
                       or (e["method"] == "Runtime.consoleAPICalled" and e["params"]["type"] in ("error", "warning"))
